@@ -2,6 +2,8 @@
 
 A clean, mobile-friendly reading planner for students. Track what you need to read, and when.
 
+**Live:** https://planner-tau-rust.vercel.app/
+
 Built as a **single self-contained HTML file** — no build step, no framework, no dependencies, no network requests. Open it in a browser and it works.
 
 **Palette:** navy `#1F3A5F` · warm cream `#F7F4EE` · coral `#E4572E`
@@ -33,6 +35,7 @@ Built as a **single self-contained HTML file** — no build step, no framework, 
 
 | File | Purpose |
 |---|---|
+| `index.html` | Entry point for static hosting — identical to `reading-planner.html` |
 | `reading-planner.html` | The entire application — markup, styles and logic in one file |
 | `reading-planner.tests.cjs` | 97-assertion test suite (jsdom) covering logic, validation and persistence |
 | `planner-mobile.png` | Screenshot — mobile with tasks |
