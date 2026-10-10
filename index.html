@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#1F3A5F" />
+<title>Student Reading Planner</title>
+<style>
+  /* ---- 3 colors only ---- */
+  :root{
+    --navy:#1F3A5F;   /* primary / text / structure */
+    --sand:#F7F4EE;   /* surface / background */
+    --coral:#E4572E;  /* accent / action */
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--sand);
+    color:var(--navy);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:16px 14px 48px;
+  }
+
+  .app{max-width:560px;margin:0 auto;}
+
+  header{margin-bottom:20px;}
+  h1{font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;}
+  header p{font-size:.85rem;opacity:.7;margin-top:2px;}
+
+  /* ---- Cards ---- */
+  .card{
+    background:#fff;
+    border:1px solid rgba(31,58,95,.14);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:16px;
+  }
+
+  label{
+    display:block;
+    font-size:.75rem;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    margin-bottom:6px;
+    opacity:.75;
+  }
+
+  input[type="text"],
+  input[type="datetime-local"]{
+    width:100%;
+    font-size:1rem;
+    font-family:inherit;
+    color:var(--navy);
+    background:var(--sand);
+    border:1.5px solid rgba(31,58,95,.2);
+    border-radius:10px;
+    padding:11px 12px;
+    outline:none;
+    transition:border-color .15s;
+  }
+  input:focus{border-color:var(--navy);}
+
+  .field{margin-bottom:14px;}
+
+  .error{
+    color:var(--coral);
+    font-size:.78rem;
+    font-weight:600;
+    margin-top:5px;
+    display:none;
+  }
+  .field.invalid input{border-color:var(--coral);}
+  .field.invalid .error{display:block;}
+
+  /* form-level (duplicate) error */
+  .form-error{
+    display:none;
+    background:rgba(228,87,46,.09);
+    border:1px solid rgba(228,87,46,.4);
+    border-radius:10px;
+    color:var(--coral);
+    font-size:.82rem;
+    font-weight:600;
+    padding:9px 11px;
+    margin-bottom:12px;
+  }
+  .form-error.show{display:block;}
+
+  button{
+    font-family:inherit;
+    font-size:1rem;
+    font-weight:600;
+    cursor:pointer;
+    border:none;
+    border-radius:10px;
+    transition:opacity .15s, transform .05s;
+  }
+  button:active{transform:scale(.985);}
+
+  .btn-add{
+    width:100%;
+    background:var(--coral);
+    color:#fff;
+    padding:13px;
+    font-size:1rem;
+  }
+  .btn-add:hover{opacity:.9;}
+
+  /* ---- Progress summary ---- */
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .stat{
+    background:#fff;
+    border:1px solid rgba(31,58,95,.14);
+    border-radius:12px;
+    padding:11px 8px;
+    text-align:center;
+  }
+  .stat .num{font-size:1.35rem;font-weight:700;line-height:1.2;}
+  .stat .lbl{
+    font-size:.68rem;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    opacity:.65;
+    margin-top:2px;
+  }
+  .stat.done .num{color:var(--coral);}
+
+  /* ---- Task list ---- */
+  .list-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin:22px 2px 10px;
+  }
+  .list-head h2{font-size:.95rem;font-weight:700;}
+  .count{font-size:.78rem;opacity:.6;}
+
+  ul{list-style:none;display:flex;flex-direction:column;gap:10px;}
+
+  li.task{
+    background:#fff;
+    border:1px solid rgba(31,58,95,.14);
+    border-left:4px solid var(--coral);
+    border-radius:12px;
+    padding:13px 14px;
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+  }
+  li.task.done{
+    border-left-color:var(--navy);
+    opacity:.62;
+  }
+  li.task.done .course{text-decoration:line-through;}
+
+  /* The button is a full 44x44 touch target; the visible 26px box is drawn
+     by the inner span, so the look is unchanged but tapping is easy. */
+  .check{
+    flex:0 0 auto;
+    width:44px;height:44px;
+    margin:-8px 0 -9px -9px;
+    border:none;
+    background:transparent;
+    display:grid;place-items:center;
+    padding:0;
+  }
+  .check .box{
+    width:26px;height:26px;
+    border:2px solid var(--navy);
+    border-radius:7px;
+    display:grid;place-items:center;
+  }
+  li.task.done .check .box{background:var(--navy);}
+  .check svg{width:14px;height:14px;stroke:#fff;stroke-width:3;fill:none;opacity:0;}
+  li.task.done .check svg{opacity:1;}
+
+  .meta{flex:1 1 auto;min-width:0;}
+  .course{font-weight:600;font-size:1rem;word-break:break-word;}
+  .when{font-size:.8rem;opacity:.65;margin-top:2px;}
+  .badge{
+    display:inline-block;
+    font-size:.65rem;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    border:1px solid rgba(31,58,95,.35);
+    border-radius:6px;
+    padding:1px 5px;
+    margin-left:6px;
+    vertical-align:1px;
+    opacity:.85;
+  }
+
+  .actions{
+    flex:0 0 auto;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:6px;
+  }
+
+  .del{
+    background:transparent;
+    border:none;
+    padding:0;
+    height:44px;
+    min-width:44px;
+    margin:-9px 0;
+    display:grid;place-items:center;
+  }
+  .del .pill{
+    color:var(--coral);
+    border:1px solid rgba(228,87,46,.35);
+    border-radius:8px;
+    padding:5px 9px;
+    font-size:.78rem;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .del:hover .pill{background:var(--coral);color:#fff;border-color:var(--coral);}
+
+  /* inline delete confirmation */
+  .confirm{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:6px;
+  }
+  .confirm .ask{
+    font-size:.72rem;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--coral);
+    white-space:nowrap;
+  }
+  .confirm .row{display:flex;gap:6px;}
+  .btn-yes{
+    background:var(--coral);
+    color:#fff;
+    min-height:38px;
+    padding:8px 14px;
+    font-size:.8rem;
+  }
+  .btn-yes:hover{opacity:.9;}
+  .btn-no{
+    background:transparent;
+    color:var(--navy);
+    border:1px solid rgba(31,58,95,.35);
+    min-height:38px;
+    padding:8px 14px;
+    font-size:.8rem;
+  }
+  .btn-no:hover{background:var(--navy);color:#fff;border-color:var(--navy);}
+
+  .empty{
+    text-align:center;
+    padding:30px 16px;
+    border:1.5px dashed rgba(31,58,95,.22);
+    border-radius:12px;
+    font-size:.88rem;
+    opacity:.65;
+  }
+  .empty strong{display:block;font-size:.95rem;margin-bottom:3px;opacity:1;}
+
+  /* ---- How it works ---- */
+  .how h2{font-size:.95rem;font-weight:700;margin-bottom:12px;}
+  ol.steps{list-style:none;display:flex;flex-direction:column;gap:11px;}
+  ol.steps li{display:flex;gap:11px;align-items:flex-start;}
+  .step-num{
+    flex:0 0 auto;
+    width:24px;height:24px;
+    border-radius:50%;
+    background:var(--navy);
+    color:var(--sand);
+    font-size:.78rem;
+    font-weight:700;
+    display:grid;place-items:center;
+  }
+  .step-text{font-size:.85rem;line-height:1.45;}
+  .step-text b{display:block;font-size:.88rem;}
+
+  /* ---- Toast ---- */
+  .toast{
+    position:fixed;
+    left:50%;
+    bottom:18px;
+    transform:translateX(-50%);
+    max-width:calc(100% - 28px);
+    background:var(--navy);
+    color:var(--sand);
+    font-size:.85rem;
+    font-weight:600;
+    padding:11px 16px;
+    border-radius:10px;
+    box-shadow:0 4px 14px rgba(31,58,95,.25);
+    opacity:0;
+    visibility:hidden;
+    transition:opacity .18s;
+    z-index:50;
+  }
+  .toast.show{opacity:1;visibility:visible;}
+  .toast.error{background:var(--coral);color:#fff;}
+
+  @media (max-width:380px){
+    .stat .num{font-size:1.15rem;}
+    li.task{padding:12px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1>Reading Planner</h1>
+    <p>Keep track of what to read, and when.</p>
+  </header>
+
+  <form class="card" id="form" novalidate>
+    <div class="form-error" id="form-error" role="alert"></div>
+
+    <div class="field" id="f-course">
+      <label for="course">Course name</label>
+      <input type="text" id="course" placeholder="e.g. Introduction to Psychology" autocomplete="off" />
+      <div class="error" id="e-course">Please enter a course name.</div>
+    </div>
+
+    <div class="field" id="f-date">
+      <label for="date">Reading date &amp; time</label>
+      <input type="datetime-local" id="date" />
+      <div class="error" id="e-date">Please choose a reading date and time.</div>
+    </div>
+
+    <button type="submit" class="btn-add">Add Reading Task</button>
+  </form>
+
+  <section class="stats" aria-label="Progress summary">
+    <div class="stat">
+      <div class="num" id="stat-total">0</div>
+      <div class="lbl">Total</div>
+    </div>
+    <div class="stat done">
+      <div class="num" id="stat-done">0</div>
+      <div class="lbl">Completed</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="stat-pending">0</div>
+      <div class="lbl">Pending</div>
+    </div>
+  </section>
+
+  <div class="list-head">
+    <h2>Your tasks</h2>
+    <span class="count" id="count"></span>
+  </div>
+
+  <ul id="list"></ul>
+  <div class="empty" id="empty">
+    <strong>No reading tasks yet</strong>
+    Add your first course above to get started.
+  </div>
+
+  <section class="card how" style="margin-top:22px;">
+    <h2>How It Works</h2>
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <span class="step-text"><b>Add a course and choose a reading date.</b>Enter the course name and pick a future date and time.</span>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <span class="step-text"><b>Organize your reading tasks.</b>Tasks are sorted automatically, earliest first.</span>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <span class="step-text"><b>Track your progress by completing tasks.</b>Your totals update as you go.</span>
+      </li>
+    </ol>
+  </section>
+
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORE = "reading-planner-tasks-v1";
+
+  var tasks = [];            // [{id, course, when, done, created}]
+  var pendingDeleteId = null;
+
+  var form      = document.getElementById("form");
+  var courseEl  = document.getElementById("course");
+  var dateEl    = document.getElementById("date");
+  var fCourse   = document.getElementById("f-course");
+  var fDate     = document.getElementById("f-date");
+  var eCourse   = document.getElementById("e-course");
+  var eDate     = document.getElementById("e-date");
+  var formError = document.getElementById("form-error");
+  var listEl    = document.getElementById("list");
+  var emptyEl   = document.getElementById("empty");
+  var countEl   = document.getElementById("count");
+  var toastEl   = document.getElementById("toast");
+
+  /* ============ storage ============ */
+
+  function isValidTask(t) {
+    return t && typeof t === "object" &&
+      typeof t.id === "string" && t.id.length > 0 &&
+      typeof t.course === "string" && t.course.trim().length > 0 &&
+      typeof t.when === "string" && !isNaN(new Date(t.when).getTime());
+  }
+
+  // Returns true when the stored data had to be repaired, so the caller can
+  // write the clean version back instead of re-parsing junk on every load.
+  function load() {
+    var repaired = false;
+    try {
+      var raw = localStorage.getItem(STORE);
+      if (!raw) { tasks = []; return false; }
+
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) { tasks = []; return true; }
+
+      // drop anything malformed rather than letting it break the render
+      var clean = [];
+      parsed.forEach(function (t) {
+        if (!isValidTask(t)) { repaired = true; return; }
+        var norm = {
+          id: t.id,
+          course: String(t.course).trim(),
+          when: t.when,
+          done: t.done === true,
+          created: typeof t.created === "number" ? t.created : 0
+        };
+        if (norm.course !== t.course || norm.done !== t.done || norm.created !== t.created) {
+          repaired = true;
+        }
+        clean.push(norm);
+      });
+      tasks = clean;
+    } catch (e) {
+      tasks = [];
+      repaired = true;
+    }
+    return repaired;
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify(tasks));
+    } catch (e) {
+      toast("Could not save — browser storage is unavailable.", "error");
+    }
+  }
+
+  /* ============ helpers ============ */
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+    });
+  }
+
+  function formatWhen(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var date = d.toLocaleDateString(undefined, {
+      weekday: "short", month: "short", day: "numeric", year: "numeric"
+    });
+    var time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    return date + " · " + time;
+  }
+
+  // current minute, floored — anything at or after this is "not in the past"
+  function currentMinute() {
+    var n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), n.getDate(), n.getHours(), n.getMinutes()).getTime();
+  }
+
+  // "YYYY-MM-DDTHH:MM" in the user's own timezone (what datetime-local wants)
+  function toLocalInput(ts) {
+    var d = new Date(ts);
+    var pad = function (v) { return String(v).padStart(2, "0"); };
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function refreshMin() {
+    dateEl.min = toLocalInput(currentMinute());
+  }
+
+  function sorted() {
+    return tasks.slice().sort(function (a, b) {
+      var diff = new Date(a.when) - new Date(b.when);
+      return diff !== 0 ? diff : a.created - b.created;   // stable tie-break
+    });
+  }
+
+  function isDuplicate(course, when) {
+    var c = course.trim().toLowerCase();
+    return tasks.some(function (t) {
+      return t.course.trim().toLowerCase() === c &&
+        new Date(t.when).getTime() === new Date(when).getTime();
+    });
+  }
+
+  /* ============ feedback ============ */
+
+  var toastTimer = null;
+  function toast(msg, kind) {
+    toastEl.textContent = msg;
+    toastEl.className = "toast show" + (kind === "error" ? " error" : "");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = "toast"; }, 2600);
+  }
+
+  /* ============ render ============ */
+
+  function render() {
+    var items = sorted();
+    listEl.innerHTML = "";
+
+    var doneCount = tasks.filter(function (t) { return t.done; }).length;
+    var total = tasks.length;
+    var pending = total - doneCount;
+
+    document.getElementById("stat-total").textContent = total;
+    document.getElementById("stat-done").textContent = doneCount;
+    document.getElementById("stat-pending").textContent = pending;
+
+    if (total === 0) {
+      emptyEl.style.display = "block";
+      countEl.textContent = "";
+      return;
+    }
+    emptyEl.style.display = "none";
+    countEl.textContent = doneCount + " of " + total + " done";
+
+    items.forEach(function (t) {
+      var li = document.createElement("li");
+      li.className = "task" + (t.done ? " done" : "");
+
+      var confirmHTML = pendingDeleteId === t.id
+        ? '<div class="confirm">' +
+            '<span class="ask">Delete this task?</span>' +
+            '<div class="row">' +
+              '<button class="btn-yes" type="button" data-act="delete-confirm" data-id="' + t.id + '">Yes</button>' +
+              '<button class="btn-no" type="button" data-act="delete-cancel">Cancel</button>' +
+            '</div>' +
+          '</div>'
+        : '<button class="del" type="button" data-act="delete-ask" data-id="' + t.id + '">' +
+            '<span class="pill">Delete</span>' +
+          '</button>';
+
+      li.innerHTML =
+        '<button class="check" type="button" aria-label="' +
+          (t.done ? "Mark as not completed" : "Mark as completed") +
+          '" aria-pressed="' + (t.done ? "true" : "false") + '" data-act="toggle" data-id="' + t.id + '">' +
+          '<span class="box">' +
+            '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>' +
+          '</span>' +
+        '</button>' +
+        '<div class="meta">' +
+          '<div class="course">' + esc(t.course) +
+            (t.done ? '<span class="badge">Done</span>' : '') +
+          '</div>' +
+          '<div class="when">' + esc(formatWhen(t.when)) + '</div>' +
+        '</div>' +
+        '<div class="actions">' + confirmHTML + '</div>';
+
+      listEl.appendChild(li);
+    });
+  }
+
+  /* ============ validation ============ */
+
+  function setFieldError(field, errorEl, message) {
+    if (message) {
+      field.classList.add("invalid");
+      errorEl.textContent = message;
+    } else {
+      field.classList.remove("invalid");
+    }
+  }
+
+  function clearFormError() {
+    formError.classList.remove("show");
+    formError.textContent = "";
+  }
+
+  function showFormError(message) {
+    formError.textContent = message;
+    formError.classList.add("show");
+  }
+
+  function validate() {
+    var course = courseEl.value.trim();
+    var when   = dateEl.value.trim();
+    var ok = true;
+
+    clearFormError();
+
+    if (!course) {
+      setFieldError(fCourse, eCourse, "Please enter a course name.");
+      ok = false;
+    } else if (course.length > 80) {
+      setFieldError(fCourse, eCourse, "Course name must be 80 characters or fewer.");
+      ok = false;
+    } else {
+      setFieldError(fCourse, eCourse, null);
+    }
+
+    if (!when) {
+      setFieldError(fDate, eDate, "Please choose a reading date and time.");
+      ok = false;
+    } else {
+      var ts = new Date(when).getTime();
+      if (isNaN(ts)) {
+        setFieldError(fDate, eDate, "That date and time could not be understood.");
+        ok = false;
+      } else if (ts < currentMinute()) {
+        setFieldError(fDate, eDate, "Please choose a date and time in the future — that one has already passed.");
+        ok = false;
+      } else {
+        setFieldError(fDate, eDate, null);
+      }
+    }
+
+    if (ok && isDuplicate(course, when)) {
+      showFormError("You already added \u201C" + course + "\u201D for that exact date and time.");
+      ok = false;
+    }
+
+    return ok;
+  }
+
+  /* ============ events ============ */
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    if (!validate()) {
+      var firstBad = form.querySelector(".field.invalid input");
+      if (firstBad) firstBad.focus();
+      return;
+    }
+
+    var course = courseEl.value.trim();
+    tasks.push({
+      id: String(Date.now()) + Math.random().toString(36).slice(2, 7),
+      course: course,
+      when: dateEl.value.trim(),
+      done: false,
+      created: Date.now()
+    });
+
+    save();
+    pendingDeleteId = null;
+    render();
+    refreshMin();
+
+    form.reset();
+    clearFormError();
+    setFieldError(fCourse, eCourse, null);
+    setFieldError(fDate, eDate, null);
+    courseEl.focus();
+    toast("Added: " + course);
+  });
+
+  courseEl.addEventListener("input", function () {
+    if (courseEl.value.trim()) setFieldError(fCourse, eCourse, null);
+    clearFormError();
+  });
+
+  dateEl.addEventListener("input", function () {
+    var v = dateEl.value.trim();
+    if (v) {
+      var ts = new Date(v).getTime();
+      if (!isNaN(ts) && ts < currentMinute()) {
+        setFieldError(fDate, eDate, "Please choose a date and time in the future — that one has already passed.");
+      } else {
+        setFieldError(fDate, eDate, null);
+      }
+    }
+    clearFormError();
+  });
+
+  listEl.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+
+    var act = btn.getAttribute("data-act");
+    var id  = btn.getAttribute("data-id");
+
+    if (act === "toggle") {
+      var toggled = null;
+      tasks.forEach(function (t) {
+        if (t.id === id) { t.done = !t.done; toggled = t; }
+      });
+      if (toggled) {
+        save();
+        render();
+        toast(toggled.done
+          ? "Completed: " + toggled.course
+          : "Marked as pending: " + toggled.course);
+      }
+      return;
+    }
+
+    if (act === "delete-ask") {
+      pendingDeleteId = id;
+      render();
+      return;
+    }
+
+    if (act === "delete-cancel") {
+      pendingDeleteId = null;
+      render();
+      return;
+    }
+
+    if (act === "delete-confirm") {
+      var removed = null;
+      tasks = tasks.filter(function (t) {
+        if (t.id === id) { removed = t; return false; }
+        return true;
+      });
+      pendingDeleteId = null;
+      save();
+      render();
+      if (removed) toast("Deleted: " + removed.course);
+      return;
+    }
+  });
+
+  /* ============ init ============ */
+
+  refreshMin();
+  if (load()) save();   // self-heal corrupt or legacy stored data
+  render();
+
+  // keep the "no past dates" floor current if the page stays open
+  setInterval(refreshMin, 60000);
+})();
+</script>
+</body>
+</html>
