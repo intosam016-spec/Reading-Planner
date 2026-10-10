@@ -4,9 +4,29 @@ A clean, mobile-friendly reading planner for students. Track what you need to re
 
 **Live:** https://planner-tau-rust.vercel.app/
 
-Built as a **single self-contained HTML file** — no build step, no framework, no dependencies, no network requests. Open it in a browser and it works.
+Built as a **single HTML file** — no build step, no framework, no bundler. The only external request is the **Geist** webfont from Google Fonts; remove the two `<link>` tags and the app still works on the system font stack.
 
 **Palette:** navy `#1F3A5F` · warm cream `#F7F4EE` · coral `#E4572E`
+
+Two derived steps exist purely for accessibility — same hues, no new colours:
+
+| Token | Value | Why |
+|---|---|---|
+| `--navy-soft` | `#5A6B80` | Secondary text — 4.97:1 on cream |
+| `--coral-deep` | `#B8411D` | Coral text and CTA fill — 5.51:1 with white |
+
+The original `#E4572E` fails WCAG AA as text and as a button background (3.68:1), so it is reserved for fills and marks where only the 3:1 graphics threshold applies.
+
+---
+
+## Design system
+
+- **Type:** Geist. Display `clamp(1.75rem → 2.375rem)` at `-0.035em` tracking; body `0.9375rem/1.6` capped at `65ch`; tabular numerals on every count and time.
+- **Spacing:** a 4px scale (`--sp-1` … `--sp-7`) — no arbitrary values.
+- **Shape lock:** surfaces `18px` · controls `10px` · micro-marks `6px`, applied consistently.
+- **Elevation:** only the form and the task list are surfaces. Everything else is grouped with hairlines and whitespace instead of card-on-card.
+- **States:** tactile `scale(.98)` on press, `:focus-visible` rings, inline errors, a composed empty state, and full `prefers-reduced-motion` support.
+- **Touch:** every control is at least 44×44px, with the smaller artwork drawn inside.
 
 ---
 
