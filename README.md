@@ -38,6 +38,7 @@ The original `#E4572E` fails WCAG AA as text and as a button background (3.68:1)
 | Immediate display | The task appears instantly, sorted into position |
 | Sorting | Chronological by date and time, earliest first |
 | Progress summary | Total / Completed / Pending, updated on every action |
+| Daily progress bar | Today's completed ÷ today's total, shown as a bar and as `3 of 5 tasks completed — 60%`. Updates live; reads 0% when nothing is scheduled today |
 | Mark complete | Checkbox toggles a navy checkmark, strikethrough and dimmed row |
 | Delete | Requires inline confirmation — **Yes** / **Cancel** — before removal |
 | Duplicate prevention | Same course at the same date/time is blocked, case-insensitively |
@@ -58,6 +59,7 @@ The original `#E4572E` fails WCAG AA as text and as a button background (3.68:1)
 | `index.html` | Entry point for static hosting — identical to `reading-planner.html` |
 | `reading-planner.html` | The entire application — markup, styles and logic in one file |
 | `reading-planner.tests.cjs` | 97-assertion test suite (jsdom) covering logic, validation and persistence |
+| `reading-planner.today.tests.cjs` | 33-assertion suite (jsdom) for the daily progress bar — today-only counting, rounding, live updates, hostile data |
 | `planner-mobile.png` | Screenshot — mobile with tasks |
 | `planner-mobile-empty.png` | Screenshot — mobile empty state |
 | `planner-desktop.png` | Screenshot — desktop |
@@ -83,13 +85,8 @@ The suite drives the real page with jsdom — it does not re-implement the logic
 
 ```bash
 npm install jsdom
-node reading-planner.tests.cjs
-```
-
-Expected output ends with:
-
-```
-  97 passed, 0 failed
+node reading-planner.tests.cjs          # 97 passed, 0 failed
+node reading-planner.today.tests.cjs    # 33 passed, 0 failed
 ```
 
 The suite covers: adding tasks, chronological sorting, empty and whitespace-only submissions, past-date rejection, duplicate detection (exact, case-insensitive and padded), completion toggling, delete confirmation *and* cancellation, refresh persistence across a separate document instance, and seven classes of corrupt stored data.
