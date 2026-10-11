@@ -180,8 +180,6 @@
     display:grid;
     grid-template-columns:repeat(3,1fr);
     border-top:1px solid var(--line);
-    border-bottom:1px solid var(--line);
-    margin-bottom:var(--sp-5);
   }
   .stat{padding:var(--sp-4) var(--sp-4);}
   .stat:first-child{padding-left:0;}
@@ -201,6 +199,46 @@
     font-size:.8125rem;
     font-weight:500;
     color:var(--navy-soft);
+  }
+
+  /* ---------- today's study progress ---------- */
+  .today{
+    padding:var(--sp-4) 0 var(--sp-5);
+    border-bottom:1px solid var(--line);
+    margin-bottom:var(--sp-5);
+  }
+  .today-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:var(--sp-1) var(--sp-3);
+    margin-bottom:var(--sp-3);
+  }
+  .t-label{
+    font-size:.8125rem;
+    font-weight:600;
+    color:var(--navy);
+    white-space:nowrap;
+  }
+  .t-count{
+    font-size:.8125rem;
+    font-weight:500;
+    color:var(--navy-soft);
+    font-variant-numeric:tabular-nums;
+  }
+  .bar{
+    height:8px;
+    background:rgba(31,58,95,.10);
+    border-radius:var(--r-micro);
+    overflow:hidden;
+  }
+  .bar-fill{
+    height:100%;
+    width:0%;
+    background:var(--coral-deep);      /* 5.51:1 vs white — well past the 3:1 graphic rule */
+    border-radius:var(--r-micro);
+    transition:width .25s ease;
   }
 
   /* ---------- list ---------- */
@@ -443,6 +481,17 @@
     </div>
   </section>
 
+  <section class="today" aria-label="Today's study progress">
+    <div class="today-head">
+      <span class="t-label" id="today-label">Today</span>
+      <span class="t-count" id="today-count">0 of 0 tasks completed — 0%</span>
+    </div>
+    <div class="bar" id="today-bar" role="progressbar"
+         aria-labelledby="today-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="bar-fill" id="today-fill"></div>
+    </div>
+  </section>
+
   <section class="surface" aria-label="Your tasks">
     <div class="list-head">
       <h2>Your tasks</h2>
@@ -498,6 +547,9 @@
   var emptyEl   = document.getElementById("empty");
   var countEl   = document.getElementById("count");
   var toastEl   = document.getElementById("toast");
+  var todayCountEl = document.getElementById("today-count");
+  var todayBarEl   = document.getElementById("today-bar");
+  var todayFillEl  = document.getElementById("today-fill");
 
   /* ============ storage ============ */
 
@@ -586,6 +638,25 @@
     dateEl.min = toLocalInput(currentMinute());
   }
 
+  // a task counts as "today" when its date falls on today's local calendar day
+  function isToday(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return false;
+    return d.toDateString() === new Date().toDateString();
+  }
+
+  function renderToday() {
+    var todayTasks = tasks.filter(function (t) { return isToday(t.when); });
+    var total = todayTasks.length;
+    var done  = todayTasks.filter(function (t) { return t.done; }).length;
+    var pct   = total === 0 ? 0 : Math.round((done / total) * 100);   // no tasks today -> 0%
+
+    todayCountEl.textContent = done + " of " + total + " tasks completed \u2014 " + pct + "%";
+    todayFillEl.style.width = pct + "%";
+    todayBarEl.setAttribute("aria-valuenow", String(pct));
+    todayBarEl.setAttribute("aria-valuetext", done + " of " + total + " tasks completed, " + pct + " percent");
+  }
+
   function sorted() {
     return tasks.slice().sort(function (a, b) {
       var diff = new Date(a.when) - new Date(b.when);
@@ -624,6 +695,8 @@
     document.getElementById("stat-total").textContent = total;
     document.getElementById("stat-done").textContent = doneCount;
     document.getElementById("stat-pending").textContent = pending;
+
+    renderToday();
 
     if (total === 0) {
       emptyEl.style.display = "block";
@@ -836,8 +909,14 @@
   if (load()) save();   // self-heal corrupt or legacy stored data
   render();
 
-  // keep the "no past dates" floor current if the page stays open
-  setInterval(refreshMin, 60000);
+  // Keep the "no past dates" floor current if the page stays open, and re-render
+  // when the calendar day rolls over so "today" never goes stale.
+  var lastDay = new Date().toDateString();
+  setInterval(function () {
+    refreshMin();
+    var d = new Date().toDateString();
+    if (d !== lastDay) { lastDay = d; render(); }
+  }, 60000);
 })();
 </script>
 </body>
