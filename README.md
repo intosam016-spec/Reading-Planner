@@ -38,7 +38,7 @@ The original `#E4572E` fails WCAG AA as text and as a button background (3.68:1)
 | Immediate display | The task appears instantly, sorted into position |
 | Sorting | Chronological by date and time, earliest first |
 | Progress summary | Total / Completed / Pending, updated on every action |
-| Daily progress bar | Today's completed ÷ today's total, shown as a bar and as `3 of 5 tasks completed — 60%`. Updates live; reads 0% when nothing is scheduled today |
+| Daily progress bar | Today's completed ÷ today's total, shown as a bar and as `3 of 5 tasks completed — 60%`. Updates live on complete / un-complete / delete. When nothing is scheduled for today it reads `No tasks scheduled today — 0%` rather than a bare `0 of 0`, which looks like a broken bar |
 | Mark complete | Checkbox toggles a navy checkmark, strikethrough and dimmed row |
 | Delete | Requires inline confirmation — **Yes** / **Cancel** — before removal |
 | Duplicate prevention | Same course at the same date/time is blocked, case-insensitively |
