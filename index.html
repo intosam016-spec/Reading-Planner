@@ -651,10 +651,17 @@
     var done  = todayTasks.filter(function (t) { return t.done; }).length;
     var pct   = total === 0 ? 0 : Math.round((done / total) * 100);   // no tasks today -> 0%
 
-    todayCountEl.textContent = done + " of " + total + " tasks completed \u2014 " + pct + "%";
+    // With nothing scheduled today a bare "0 of 0" reads like a broken bar, so say
+    // plainly why it is empty. Still 0%, still no errors.
+    todayCountEl.textContent = total === 0
+      ? "No tasks scheduled today \u2014 0%"
+      : done + " of " + total + " tasks completed \u2014 " + pct + "%";
+
     todayFillEl.style.width = pct + "%";
     todayBarEl.setAttribute("aria-valuenow", String(pct));
-    todayBarEl.setAttribute("aria-valuetext", done + " of " + total + " tasks completed, " + pct + " percent");
+    todayBarEl.setAttribute("aria-valuetext", total === 0
+      ? "No tasks scheduled today"
+      : done + " of " + total + " tasks completed, " + pct + " percent");
   }
 
   function sorted() {
