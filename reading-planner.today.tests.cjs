@@ -46,7 +46,8 @@ const mk = (course, when, done, i) => ({ id: "t" + i, course, when, done, create
 console.log("\n[T1] No tasks at all");
 {
   const t = boot();
-  ok("shows 0 of 0 and 0%", t.count() === "0 of 0 tasks completed — 0%", t.count());
+  ok("explains why the bar is empty", t.count() === "No tasks scheduled today — 0%", t.count());
+  ok("still reports 0%", /0%$/.test(t.count()), t.count());
   ok("bar width is 0%", t.width() === "0%", t.width());
   ok("aria-valuenow is 0", t.aria() === "0", t.aria());
   ok("page still renders the empty state", t.d.getElementById("empty").style.display !== "none");
@@ -84,6 +85,30 @@ console.log("\n[T3] Only today's tasks count");
   t.dom.window.close();
 }
 
+console.log("\n[T3b] The reported bug — completed a task dated another day");
+{
+  // exactly the reported case: one task, scheduled for a future Saturday, now completed
+  const seed = JSON.stringify([mk("SVG 514 — Research Methods", dayOffsetAt(4, 9, 0), true, 1)]);
+  const t = boot(seed);
+  ok("Today says nothing is scheduled today", t.count() === "No tasks scheduled today — 0%", t.count());
+  ok("Today bar stays at 0% (correct — the task is not today)", t.width() === "0%", t.width());
+  ok("but Completed still counts it", t.d.getElementById("stat-done").textContent === "1", t.d.getElementById("stat-done").textContent);
+  ok("and the row is visibly ticked", t.rows()[0].className.indexOf("done") > -1, t.rows()[0].className);
+  ok("and the checkbox is pressed for a11y", t.d.querySelector(".check").getAttribute("aria-pressed") === "true");
+  t.dom.window.close();
+}
+
+console.log("\n[T3c] Completing a task scheduled for TODAY does move the bar");
+{
+  const seed = JSON.stringify([mk("Today task", todayAt(9, 0), false, 1)]);
+  const t = boot(seed);
+  ok("starts at 0 of 1", t.count() === "0 of 1 tasks completed — 0%", t.count());
+  t.check(0);
+  ok("ticking it moves Today to 100%", t.count() === "1 of 1 tasks completed — 100%", t.count());
+  ok("and the bar fills", t.width() === "100%", t.width());
+  t.dom.window.close();
+}
+
 console.log("\n[T4] Updates live when completing / un-completing");
 {
   const seed = JSON.stringify([
@@ -115,7 +140,7 @@ console.log("\n[T5] Updates when a today task is deleted");
   t.del(0); t.yes();
   ok("deleting a completed today task -> 0 of 1 — 0%", t.count() === "0 of 1 tasks completed — 0%", t.count());
   t.del(0); t.yes();
-  ok("deleting the last today task -> 0 of 0 — 0%", t.count() === "0 of 0 tasks completed — 0%", t.count());
+  ok("deleting the last today task -> explains the empty bar", t.count() === "No tasks scheduled today — 0%", t.count());
   ok("no crash, bar back to 0%", t.width() === "0%", t.width());
   t.dom.window.close();
 }
