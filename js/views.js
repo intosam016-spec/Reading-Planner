@@ -56,7 +56,7 @@ var Views = (function () {
   function authShell(inner) {
     return '<div class="auth-wrap">' +
       '<div class="auth-head"><h1>Study Planner</h1>' +
-      "<p>Plan your university reading around your lectures.</p></div>" +
+      "<p>Plan your reading around your lectures.</p></div>" +
       '<div class="surface">' + inner + "</div>" +
       (A.isSignedIn() ? "" : devBanner()) +
     "</div>";
