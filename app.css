@@ -1,5 +1,5 @@
 /* =====================================================================
-   University Study Planner — styles
+   Study Planner — styles
    Carries over the existing design system unchanged:
      palette  navy #1F3A5F · cream #F7F4EE · coral #E4572E
      type     Geist
@@ -71,7 +71,6 @@ input,select,textarea{font:inherit;color:inherit;}
   display:flex;align-items:center;gap:var(--sp-3);
 }
 .brand{font-weight:600;font-size:.9375rem;letter-spacing:-.02em;}
-.brand span{color:var(--navy-soft);font-weight:500;}
 .who{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2);font-size:.8125rem;color:var(--navy-soft);}
 .who b{color:var(--navy);font-weight:600;}
 
