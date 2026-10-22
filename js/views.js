@@ -516,7 +516,10 @@ var Views = (function () {
       var html = "";
       if (st.error) {
         html += UI.banner("err", "<b>Could not read that timetable.</b> " + UI.esc(st.error) +
-          "<br>You can still add lectures one at a time using the form below.");
+          "<br><br><b>What usually helps:</b> crop to just the timetable, use a sharp screenshot " +
+          "rather than a photo of a screen, make sure the text is dark on light (or light on dark \u2014 either is fine), " +
+          "and keep the image under 10 MB." +
+          "<br><br>You can also add lectures one at a time using the form below.");
       }
       if (st.warnings && st.warnings.length) {
         html += UI.banner("dev", "<b>Please check these before saving.</b><ul style=\"margin:8px 0 0 18px\">" +
