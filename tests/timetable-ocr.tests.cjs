@@ -123,6 +123,44 @@ eq(T.validateFile({ type: "image/png", size: 1000 }), null, "valid png accepted"
 eq(T.validateFile({ type: "image/jpeg", size: 1000 }), null, "valid jpeg accepted");
 eq(T.validateFile({ type: "image/jpg", size: 1000 }), null, "jpg alias accepted");
 
+console.log("\n[11] Real OCR text from a dark-background timetable");
+const REAL = [
+  "300-Level Sample Balanced Timetable",
+  "\u2022 Monday",
+  "\u25e6 08:00 AM - 11:00 AM: SVG 311 Geodetic Surveying I",
+  "\u25e6 02:00 PM - 05:00 PM: SVG 313 Photogrammetry I",
+  "\u2022 Tuesday",
+  "\u25e6 09:00 AM - 12:00 PM: SVG 315 Cartography & Map Production",
+];
+r = T.parseLines(REAL);
+ok(r.ok, "parsed a day-labelled list");
+eq(r.rows.length, 3, "3 lectures found");
+eq(r.rows[0].day, 1, "first row is Monday");
+eq([r.rows[0].start, r.rows[0].end], ["08:00", "11:00"], "08:00 AM - 11:00 AM read");
+eq(r.rows[1].day, 1, "second row stays Monday");
+eq([r.rows[1].start, r.rows[1].end], ["14:00", "17:00"], "02:00 PM - 05:00 PM read");
+eq(r.rows[2].day, 2, "third row is Tuesday");
+ok(r.rows[0].course.indexOf("SVG 311") === 0, "course name kept (" + r.rows[0].course + ")");
+ok(!/^[\u00a9\u25e6:;\s]/.test(r.rows[0].course), "no bullet or colon left in the course");
+
+console.log("\n[12] Grid with a left-hand time column");
+r = T.parseLines([
+  { text: "Monday Tuesday Wednesday", words: [
+      { text: "Monday", x: 100, width: 60 }, { text: "Tuesday", x: 300, width: 60 },
+      { text: "Wednesday", x: 500, width: 60 }] },
+  { text: "0800 MATH101 csc201", words: [
+      { text: "0800", x: 10, width: 40 }, { text: "MATH101", x: 110, width: 60 },
+      { text: "csc201", x: 310, width: 60 }] },
+  { text: "10:00 PHY110", words: [
+      { text: "10:00", x: 10, width: 40 }, { text: "PHY110", x: 310, width: 60 }] },
+]);
+ok(r.ok, "grid time-band layout parsed");
+eq(r.rows.length, 3, "one row per cell");
+eq(r.rows.map(x => x.day).sort(), [1, 2, 2], "days taken from columns");
+eq(r.rows[0].course, "MATH101", "band label stripped from the course (got " + r.rows[0].course + ")");
+eq(r.rows[0].start, "08:00", "band start is the row time");
+eq(r.rows[2].start, "10:00", "second band starts at 10:00");
+
 console.log("\n" + "=".repeat(46));
 console.log(`  ${pass} passed, ${fail} failed`);
 console.log("=".repeat(46));
