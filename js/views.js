@@ -64,17 +64,15 @@ var Views = (function () {
 
   function devBanner() {
     var b = S.backendStatus ? S.backendStatus() : { mode: "local", healthy: true, reason: "" };
-    if (b.mode === "supabase") {
-      // Configured, but the database did not answer. Say so plainly rather
-      // than hiding the warning and letting every write fail quietly.
-      if (b.healthy) return "";
+    // Local-only mode is deliberately silent. The banner is reserved for a
+    // *configured* backend that is failing, which is a real fault worth
+    // reporting rather than a notice about where data is kept.
+    if (b.mode === "supabase" && !b.healthy) {
       return U.banner("err",
         "<b>Database not ready.</b> Supabase is configured but its tables could not be read — " +
         U.esc(b.reason) + ". Run <code>supabase/schema.sql</code> in your project's SQL Editor, then reload.");
     }
-    return U.banner("dev",
-      "<b>Development mode.</b> Accounts and data are stored only in this browser, so they are " +
-      "not private and not shared across devices. Connect Supabase to make this real.");
+    return "";
   }
 
   function googleButton() {
