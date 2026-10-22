@@ -63,7 +63,15 @@ var Views = (function () {
   }
 
   function devBanner() {
-    if (S.driverName() === "supabase") return "";
+    var b = S.backendStatus ? S.backendStatus() : { mode: "local", healthy: true, reason: "" };
+    if (b.mode === "supabase") {
+      // Configured, but the database did not answer. Say so plainly rather
+      // than hiding the warning and letting every write fail quietly.
+      if (b.healthy) return "";
+      return U.banner("err",
+        "<b>Database not ready.</b> Supabase is configured but its tables could not be read — " +
+        U.esc(b.reason) + ". Run <code>supabase/schema.sql</code> in your project's SQL Editor, then reload.");
+    }
     return U.banner("dev",
       "<b>Development mode.</b> Accounts and data are stored only in this browser, so they are " +
       "not private and not shared across devices. Connect Supabase to make this real.");
@@ -187,8 +195,7 @@ var Views = (function () {
       upcomingDeadlines.sort(function (a, b) { return a.days - b.days; });
 
       var html =
-        '<div class="grid three" style="margin-bottom:24px">' +
-          '<div class="tile"><div class="n">' + courses.length + '</div><div class="l">Courses</div></div>' +
+        '<div class="grid three" style="margin-bottom:24px">' +          '<div class="tile"><div class="n">' + courses.length + '</div><div class="l">Courses</div></div>' +
           '<div class="tile"><div class="n">' + todaySessions.length + '</div><div class="l">Reading sessions today</div></div>' +
           '<div class="tile"><div class="n">' + upcomingExams.length + '</div><div class="l">Upcoming exams</div></div>' +
           '<div class="tile"><div class="n">' + upcomingDeadlines.length + '</div><div class="l">Upcoming deadlines</div></div>' +
@@ -226,7 +233,41 @@ var Views = (function () {
       var host = ctx.root.querySelector("#dash");
       host.innerHTML = html;
       host.querySelector('[data-act="go-generate"]').addEventListener("click", function () { ctx.navigate("#/generate"); });
+
+      var snap = offerableImport(ctx, courses);
+      if (snap) {
+        var card = document.createElement("div");
+        card.className = "surface";
+        card.innerHTML = U.banner("dev",
+          "<b>Data found in this browser.</b> " + snap.count + " item(s) were saved by a previous " +
+          "local account (" + U.esc(snap.email) + "). Import them into your real account?") +
+          '<button class="btn" type="button" data-act="import">Import ' + snap.count + " item(s)</button>";
+        host.appendChild(card);
+        var imp = card.querySelector('[data-act="import"]');
+        imp.addEventListener("click", function () {
+          imp.disabled = true;
+          imp.textContent = "Importing\u2026";
+          S.importLocalSnapshot(ctx.user.id, snap).then(function (n) {
+            UI.toast("Imported " + n + " item(s)");
+            dashboard(ctx);
+          }).catch(function (e) {
+            imp.disabled = false;
+            imp.textContent = "Retry import";
+            UI.toast("Import failed: " + e.message);
+          });
+        });
+      }
     }).catch(showError(ctx));
+  }
+
+  // Offers a one-time import when the real backend is live but this browser
+  // still holds data from the old local driver. Only ever on an empty
+  // account, so it cannot overwrite data that already exists.
+  function offerableImport(ctx, courses) {
+    if (!S.localSnapshot || !S.backendStatus) return null;
+    if (S.backendStatus().mode !== "supabase") return null;
+    if (courses.length) return null;
+    return S.localSnapshot(ctx.user.email);
   }
 
   function courseName(courses, id) {
