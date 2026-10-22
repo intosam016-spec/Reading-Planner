@@ -182,6 +182,54 @@ var StudyEngine = (function () {
     return byDay;
   }
 
+  /* ---------- automatic study windows ---------- */
+
+  /* A student who has just uploaded a lecture timetable should not have to
+     configure anything before getting a reading plan. These windows are
+     derived from the lectures alone: the normal study day minus lecture
+     times (plus an optional travel buffer). They are ordinary availability
+     rows, so they stay visible and editable on the timetable page. */
+  var DEFAULT_STUDY_BOUNDS = {
+    0: ["10:00", "19:00"],   // Sunday
+    1: ["08:00", "21:00"],
+    2: ["08:00", "21:00"],
+    3: ["08:00", "21:00"],
+    4: ["08:00", "21:00"],
+    5: ["08:00", "21:00"],
+    6: ["09:00", "18:00"]    // Saturday
+  };
+
+  function deriveStudyWindows(lectures, options) {
+    var o = options || {};
+    var buffer = Math.max(0, +o.buffer || 0);
+    var minLength = Math.max(MIN_SESSION, +o.minLength || MIN_SESSION);
+    var bounds = o.bounds || DEFAULT_STUDY_BOUNDS;
+    var out = [];
+
+    for (var d = 0; d < 7; d++) {
+      var b = bounds[d];
+      if (!b) continue;
+      var start = toMin(b[0]), end = toMin(b[1]);
+      if (!(end > start)) continue;
+
+      var cuts = (lectures || [])
+        .filter(function (l) { return +l.day === d; })
+        .map(function (l) { return { start: toMin(l.start), end: toMin(l.end) }; })
+        .filter(function (c) { return c.start < c.end; })
+        .map(function (c) { return { start: c.start - buffer, end: c.end + buffer }; });
+
+      subtract([{ start: start, end: end }], cuts).forEach(function (seg) {
+        if (seg.end - seg.start >= minLength) {
+          out.push({
+            day: d, start: toHHMM(seg.start), end: toHHMM(seg.end),
+            kind: "study", label: "Free time"
+          });
+        }
+      });
+    }
+    return out;
+  }
+
   /* ---------- demand ---------- */
 
   function demandMinutes(course, sessionMinutes) {
@@ -501,6 +549,8 @@ var StudyEngine = (function () {
     urgency: urgency,
     validatePlanInput: validatePlanInput,
     freeIntervalsByDay: freeIntervalsByDay,
+    deriveStudyWindows: deriveStudyWindows,
+    DEFAULT_STUDY_BOUNDS: DEFAULT_STUDY_BOUNDS,
     demandMinutes: demandMinutes,
     generatePlan: generatePlan,
     regenerateRemaining: regenerateRemaining,
