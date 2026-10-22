@@ -128,6 +128,38 @@
     return null;
   }
 
+  /* A time on its own, e.g. "0800", "10:00", "9am". Returns minutes. */
+  function parseTimePoint(raw) {
+    var s = normalise(raw).trim();
+    var m, mins;
+    m = s.match(/^(\d{1,2})\s*[:.]\s*(\d{2})\s*(am|pm|a\.m\.|p\.m\.)?$/i);
+    if (m) { mins = toMinutes(+m[1], +m[2], m[3]); return mins >= 0 ? mins : null; }
+    m = s.match(/^(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)$/i);
+    if (m) { mins = toMinutes(+m[1], 0, m[2]); return mins >= 0 ? mins : null; }
+    m = s.match(/^(\d{3,4})$/);
+    if (m) {
+      var v = m[1];
+      var h = v.length === 3 ? +v.slice(0, 1) : +v.slice(0, 2);
+      var mi = v.length === 3 ? +v.slice(1) : +v.slice(2);
+      return (h <= 23 && mi <= 59) ? h * 60 + mi : null;
+    }
+    return null;
+  }
+
+  // A time at the start of a line, with whatever follows it.
+  function leadingTimePoint(text) {
+    var s = normalise(text);
+    var m = s.match(/^(\d{1,2}\s*[:.]\s*\d{2}\s*(?:am|pm|a\.m\.|p\.m\.)?)\b/i)
+         || s.match(/^(\d{3,4})\b/);
+    if (!m) return null;
+    // "09:00-10:00" is a range, not a band label — leave it to the range parser.
+    var next = s.charAt(m[0].length);
+    if (next === "-" || next === "\u2013" || next === "\u2014") return null;
+    var mins = parseTimePoint(m[1]);
+    if (mins === null) return null;
+    return { min: mins, rest: normalise(s.slice(m[1].length)) };
+  }
+
   function parseDay(text) {
     var t = normalise(text);
     var best = null;
@@ -150,7 +182,14 @@
     }
     if (dayWord) t = t.replace(dayWord, " ");
     DAYS.forEach(function (d) { t = t.replace(d.re, " "); });
-    return t.replace(/^[\s\-–—:|.,;·•]+|[\s\-–—:|.,;·•]+$/g, "").replace(/\s+/g, " ").trim();
+    // Bullets and list markers OCR as stray glyphs (\u25e6 often comes back
+    // as \u00a9); drop them, then trim leading punctuation and trailing separators.
+    t = t.replace(/[\u00a9\u00ae\u25e6\u25cf\u25cb\u25aa\u25ab\u25a0\u25a1\u2022\u2023\u2043\u00b7\u2027\u2713\u2714]/g, " ");
+    return t
+      .replace(/^[^A-Za-z0-9(]+/, "")
+      .replace(/[\s\-\u2013\u2014:|.,;\u00b7\u2022]+$/, "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   // "Lecture Hall A" / "LT1" / "Room 12" → location. Everything else → course.
@@ -215,24 +254,30 @@
       });
     });
 
-    // ---- pass 2: grid with a header row of day names --------------------
+    // ---- pass 2: grid layouts -----------------------------------------
     if (!rows.length) {
       var header = findDayHeader(src);
       if (header) {
-        src.forEach(function (ln) {
-          if (ln === header.line) return;
-          var range = parseTimeRange(ln.text);
-          if (!range) return;
-          range.raw = range.raw || matchRawTime(ln.text);
-          var day = nearestColumnDay(header.columns, ln);
-          if (day === null) return;
-          var rest = leftovers(ln.text, range, null);
-          var split = splitCourseAndLocation(rest);
-          rows.push({
-            day: day, start: range.start, end: range.end,
-            course: split.course, location: split.location, source: "grid"
+        // 2a: the clock sits in a left-hand column, one band per time
+        rows = parseGridBands(src, header);
+
+        // 2b: the line itself carries an explicit "09:00 - 10:30" range
+        if (!rows.length) {
+          src.forEach(function (ln) {
+            if (ln === header.line) return;
+            var range = parseTimeRange(ln.text);
+            if (!range) return;
+            range.raw = range.raw || matchRawTime(ln.text);
+            var day = nearestColumnDay(header.columns, ln);
+            if (day === null) return;
+            var rest = leftovers(ln.text, range, null);
+            var split = splitCourseAndLocation(rest);
+            rows.push({
+              day: day, start: range.start, end: range.end,
+              course: split.course, location: split.location, source: "grid"
+            });
           });
-        });
+        }
       }
     }
 
@@ -267,6 +312,15 @@
 
     // ---- tidy ----------------------------------------------------------
     rows = dedupe(rows).map(function (r) {
+      // A left-column band label can survive into the course text (OCR often
+      // emits "0800 MATH101" as one line). Strip it.
+      r.course = String(r.course || "")
+        .replace(/^\d{1,2}\s*[:.]\s*\d{2}\s*/, "")
+        .replace(/^\d{3,4}\s+/, "")
+        .trim();
+      // A course that is only digits is noise, not a name.
+      if (/^\d+$/.test(r.course)) r.course = "";
+
       var code = courseCode(r.course);
       if (!r.course) {
         r.course = code || "";
@@ -275,6 +329,9 @@
       if (!r.location) r.location = "";
       r.code = code;
       return r;
+    }).filter(function (r) {
+      // A row with neither a course nor a room is an artefact, not a lecture.
+      return !!(r.course || r.location);
     });
 
     var missingDay = rows.filter(function (r) { return r.day === null || r.day === undefined; }).length;
@@ -372,6 +429,88 @@
     return best;
   }
 
+  function nearestDay(columns, x) {
+    var best = null, bestD = Infinity;
+    columns.forEach(function (c) {
+      var d = Math.abs(c.x - x);
+      if (d < bestD) { bestD = d; best = c.day; }
+    });
+    return best;
+  }
+
+  // Split one OCR line into per-day-column buckets using word positions.
+  function groupByColumn(line, columns, text) {
+    var buckets = {};
+    function push(day, w) { (buckets[day] = buckets[day] || []).push(w); }
+
+    if (line.words && line.words.length) {
+      line.words.forEach(function (w) {
+        // The clock in the left column is not cell content.
+        if (parseTimePoint(w.text) !== null) return;
+        var x = (w.x != null) ? w.x + (w.width || 0) / 2 : null;
+        if (x === null) return;
+        var day = nearestDay(columns, x);
+        if (day !== null) push(day, w.text);
+      });
+    } else if (line.x != null) {
+      var day = nearestDay(columns, line.x);
+      if (day !== null) push(day, text);
+    }
+    return Object.keys(buckets).map(function (d) { return { day: +d, words: buckets[d] }; });
+  }
+
+  /* Grid timetables put the clock in a left-hand column, not as
+     "09:00 - 10:30" text. This walks the lines in reading order, opens a
+     band whenever a time appears, and files each line's words under the
+     day column they sit in. A band runs until the next time appears. */
+  function parseGridBands(lines, header) {
+    var ordered = lines.slice().filter(function (l) { return l !== header.line; })
+      .sort(function (a, b) { return (a.y || 0) - (b.y || 0); });
+
+    var bands = [];
+    var current = null;
+
+    ordered.forEach(function (line) {
+      var text = line.text;
+      var lead = leadingTimePoint(text);
+      if (lead) {
+        var mins = lead.min;
+        // Reading down a day the clock increases; a jump backwards means a
+        // lost "PM", so recover it when that stays inside the day.
+        if (current && mins < current.startMin && mins + 720 <= 1440) mins += 720;
+        current = { startMin: mins, cells: {} };
+        bands.push(current);
+        text = lead.rest;
+      }
+      if (!current || !text) return;
+
+      groupByColumn(line, header.columns, text).forEach(function (g) {
+        var t = normalise(g.words.join(" "));
+        if (!t) return;
+        var cell = current.cells[g.day] = current.cells[g.day] || { course: [], loc: [] };
+        if (looksLikeLocation(t)) cell.loc.push(t);
+        else cell.course.push(t);
+      });
+    });
+
+    var rows = [];
+    bands.forEach(function (band, i) {
+      var endMin = (i + 1 < bands.length) ? bands[i + 1].startMin : band.startMin + 60;
+      if (endMin <= band.startMin) endMin = band.startMin + 60;
+      Object.keys(band.cells).forEach(function (day) {
+        var cell = band.cells[day];
+        var course = normalise(cell.course.join(" "));
+        var loc = normalise(cell.loc.join(" "));
+        if (!course && !loc) return;
+        rows.push({
+          day: +day, start: fmt(band.startMin), end: fmt(endMin > 1440 ? 1440 : endMin),
+          course: course, location: loc, source: "grid-band"
+        });
+      });
+    });
+    return rows;
+  }
+
   /* ---------------------------------------------------------- extraction */
 
   var TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
@@ -401,21 +540,130 @@
     return null;
   }
 
+  /* Redraws the image on a canvas before OCR. This is not cosmetic:
+       - phones produce huge photos, which exhaust the worker and surface
+         as "File could not be read! Code=0";
+       - EXIF rotation is applied by <img> but not by the OCR worker, so a
+         portrait photo would otherwise be read sideways;
+       - dark-background timetable screenshots read almost perfectly once
+         inverted, because OCR expects dark text on light paper.
+     Returns a clean PNG blob. */
+  function prepareImage(file) {
+    return new Promise(function (resolve, reject) {
+      var url = null;
+      try { url = URL.createObjectURL(file); } catch (e) { return reject(new Error("That image could not be opened.")); }
+
+      var img = new Image();
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error("That image could not be opened. It may be damaged \u2014 try a different file or a screenshot of it."));
+      };
+      img.onload = function () {
+        try {
+          var w = img.naturalWidth || img.width;
+          var h = img.naturalHeight || img.height;
+          if (!w || !h) throw new Error("That image has no readable size.");
+
+          // Downscale big photos (memory), upscale small ones (accuracy).
+          var longest = Math.max(w, h);
+          var scale = 1;
+          if (longest > 1800) scale = 1800 / longest;
+          else if (longest < 900) scale = Math.min(3, 900 / longest);
+
+          var cw = Math.max(1, Math.round(w * scale));
+          var ch = Math.max(1, Math.round(h * scale));
+          var c = document.createElement("canvas");
+          c.width = cw; c.height = ch;
+          var ctx = c.getContext("2d", { willReadFrequently: true });
+          // white base, so transparent PNGs do not read as black
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.drawImage(img, 0, 0, cw, ch);
+
+          var frame = ctx.getImageData(0, 0, cw, ch);
+          var px = frame.data, i, sum = 0, n = cw * ch;
+
+          // greyscale
+          for (i = 0; i < px.length; i += 4) {
+            var g = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) | 0;
+            px[i] = px[i + 1] = px[i + 2] = g;
+            sum += g;
+          }
+
+          var avg = sum / n;
+          // Dark screenshot -> invert to dark-on-light.
+          if (avg < 118) {
+            for (i = 0; i < px.length; i += 4) {
+              var v = 255 - px[i];
+              px[i] = px[i + 1] = px[i + 2] = v;
+            }
+          }
+
+          // Gentle contrast stretch around the midpoint improves thin text.
+          for (i = 0; i < px.length; i += 4) {
+            var q = px[i];
+            q = (q - 128) * 1.25 + 128;
+            px[i] = px[i + 1] = px[i + 2] = q < 0 ? 0 : q > 255 ? 255 : q;
+          }
+
+          ctx.putImageData(frame, 0, 0);
+          URL.revokeObjectURL(url);
+
+          if (c.toBlob) {
+            c.toBlob(function (blob) {
+              blob ? resolve(blob) : reject(new Error("That image could not be prepared for reading."));
+            }, "image/png");
+          } else {
+            reject(new Error("This browser cannot prepare the image for reading."));
+          }
+        } catch (e) {
+          URL.revokeObjectURL(url);
+          reject(e);
+        }
+      };
+      img.src = url;
+    });
+  }
+
+  /* Tesseract's own messages are cryptic ("File could not be read! Code=0").
+     Translate the common ones into something a student can act on. */
+  function friendlyError(err) {
+    var m = String(err && err.message ? err.message : err || "");
+    if (/could not be read|code\s*=\s*0|pixRead|invalid image|image.*parse/i.test(m)) {
+      return "The image could not be processed. Try a screenshot of the timetable instead of a photo, or a different file.";
+    }
+    if (/failed to fetch|networkerror|network|load the text-recognition|could not load/i.test(m)) {
+      return "The text-recognition library could not be downloaded. Check your connection and try again.";
+    }
+    if (/memory|allocation|out of bounds/i.test(m)) {
+      return "That image is too large to process. Try a smaller or cropped version.";
+    }
+    if (/worker|initialize/i.test(m)) {
+      return "The text-recognition worker did not start. Reload the page and try again.";
+    }
+    return m || "Something went wrong while reading the image.";
+  }
+
   /* Runs OCR, then parses. `onProgress(0..1, label)` reports status. */
   function extractFromImage(file, onProgress) {
     var bad = validateFile(file);
     if (bad) return Promise.reject(new Error(bad));
 
     var report = onProgress || function () {};
-    report(0.02, "Loading text recognition\u2026");
+    report(0.02, "Preparing the image\u2026");
 
-    return loadScript(TESSERACT_URL).then(function () {
-      if (!GLOBAL.Tesseract) throw new Error("The text-recognition library did not start.");
-      report(0.08, "Reading the image\u2026");
-      return GLOBAL.Tesseract.recognize(file, "eng", {
-        logger: function (m) {
-          if (m.status === "recognizing text") report(0.1 + 0.8 * (m.progress || 0), "Reading the image\u2026");
-        }
+    // Prepare first; if that fails for any reason, still try the raw file
+    // rather than giving up.
+    return prepareImage(file).catch(function () { return file; }).then(function (source) {
+      report(0.05, "Loading text recognition\u2026");
+      return loadScript(TESSERACT_URL).then(function () {
+        if (!GLOBAL.Tesseract) throw new Error("The text-recognition library did not start. Check your connection and try again.");
+        report(0.08, "Reading the image\u2026");
+        return GLOBAL.Tesseract.recognize(source, "eng", {
+          logger: function (m) {
+            if (m.status === "recognizing text") report(0.1 + 0.8 * (m.progress || 0), "Reading the image\u2026");
+          }
+        });
       });
     }).then(function (res) {
       report(0.94, "Working out the timetable\u2026");
@@ -436,6 +684,9 @@
       out.text = String(data.text || "");
       report(1, "Done");
       return out;
+    }).catch(function (e) {
+      // Surface a readable reason rather than a raw worker error code.
+      throw new Error(friendlyError(e));
     });
   }
 
@@ -447,7 +698,10 @@
     splitCourseAndLocation: splitCourseAndLocation,
     courseCode: courseCode,
     validateFile: validateFile,
+    prepareImage: prepareImage,
     extractFromImage: extractFromImage,
+    friendlyError: friendlyError,
+    parseTimePoint: parseTimePoint,
     MAX_BYTES: MAX_BYTES,
     ACCEPTED: ACCEPTED
   };
