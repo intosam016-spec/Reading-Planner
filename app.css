@@ -101,6 +101,7 @@ input,select,textarea{font:inherit;color:inherit;}
 }
 .nav a:hover{color:var(--navy);}
 .nav a[aria-current="page"]{color:var(--navy);font-weight:600;border-bottom-color:var(--coral-deep);}
+.nav-short{display:none;}
 
 /* ---------- layout blocks ---------- */
 .page-head{padding:var(--sp-6) 0 var(--sp-5);}
@@ -290,6 +291,32 @@ input,select,textarea{font:inherit;color:inherit;}
 
 .muted{color:var(--navy-soft);}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+
+/* Narrow screens: the full labels overflow and the strip scrolls, leaving
+   the last tabs off-screen with no hint they exist. Swap to short labels
+   and wrap into a 3-column grid so every tab is visible at once. */
+@media (max-width:860px){
+  .nav-in{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:0;
+    overflow:visible;
+    padding:0 var(--sp-2);
+  }
+  .nav a{
+    justify-content:center;
+    padding:0 var(--sp-2);
+    font-size:.8125rem;
+    min-height:48px;
+    white-space:normal;
+    text-align:center;
+    line-height:1.15;
+  }
+  /* hairline between the two rows of tabs */
+  .nav a:nth-child(n+4){border-top:1px solid var(--line);}
+  .nav-full{display:none;}
+  .nav-short{display:inline;}
+}
 
 @media (max-width:640px){
   .surface{padding:var(--sp-4);}
