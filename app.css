@@ -389,6 +389,24 @@ input,select,textarea{font:inherit;color:inherit;}
   .up-actions-row .btn{width:100%;}
 }
 
+/* ---------- collapsible settings ---------- */
+.adv{margin:var(--sp-3) 0 0;}
+.adv summary{
+  cursor:pointer;list-style:none;
+  display:flex;align-items:center;gap:var(--sp-2);
+  min-height:44px;
+  font-size:.9375rem;font-weight:500;color:var(--navy);
+}
+.adv summary::-webkit-details-marker{display:none;}
+.adv summary::before{
+  content:"\25B8";display:inline-block;color:var(--navy-soft);
+  transition:transform .15s ease;
+}
+.adv[open] summary::before{transform:rotate(90deg);}
+.adv summary:hover{color:var(--coral-deep);}
+.adv summary:focus-visible{outline:2px solid var(--coral-deep);outline-offset:2px;border-radius:var(--r-micro);}
+.adv-body{padding-top:var(--sp-3);}
+
 @media (prefers-reduced-motion:reduce){
   *{transition:none !important;animation:none !important;}
 }
