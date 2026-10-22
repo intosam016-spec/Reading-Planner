@@ -56,6 +56,17 @@ and asks rather than guessing:
 - times but no days → "Times were found but no day could be matched"
 - a row with no course name → that row is flagged for you to fill in
 
+While you review the extracted rows, the **Generate my timetable** button is offered
+directly in the upload section — there is no need to go and configure anything
+elsewhere.
+
+Generating needs no setup. If you have never set study periods, they are derived
+automatically from your lecture timetable (the normal study day minus lectures,
+plus any travel buffer) and saved as ordinary study periods, so they stay visible
+and editable on the timetable page. The plan is then built and saved in one click;
+the session length, break, daily cap and start date live behind a
+**Change these settings** disclosure, collapsed by default.
+
 A row is never saved unless its course, start and end time are valid. Lectures
 that belong to a course you already have are attached to it; genuinely new
 course names create a course with a default 2-hour reading estimate, which you
