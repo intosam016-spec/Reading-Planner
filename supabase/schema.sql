@@ -1,5 +1,5 @@
 -- =====================================================================
--- University Study Planner — Supabase schema
+-- Study Planner — Supabase schema
 --
 -- Run this once in Supabase Studio -> SQL Editor -> New query -> Run.
 --
@@ -158,3 +158,48 @@ create trigger courses_touch before update on public.courses
 drop trigger if exists sessions_touch on public.sessions;
 create trigger sessions_touch before update on public.sessions
   for each row execute function public.touch_updated_at();
+
+-- =====================================================================
+-- Grants and schema cache
+--
+-- PostgREST only exposes a table when the API roles hold a privilege on
+-- it. A table can therefore exist in Postgres yet be invisible to the
+-- API, which surfaces as:
+--   PGRST205  Could not find the table 'public.courses' in the schema cache
+--
+-- Granting to anon/authenticated does NOT weaken the security model.
+-- Row-level security remains the gate, and for an anonymous request
+-- auth.uid() is null, so every policy matches zero rows.
+--
+-- Deliberately scoped to these six tables only: a blanket grant over
+-- the whole schema would also expose any unrelated table the project
+-- already has.
+-- =====================================================================
+grant usage on schema public to anon, authenticated;
+
+grant select, insert, update, delete on
+  public.profiles,
+  public.courses,
+  public.lectures,
+  public.availability,
+  public.sessions,
+  public.settings
+  to anon, authenticated;
+
+-- make PostgREST pick the tables up immediately
+alter table public.profiles     enable row level security;
+alter table public.courses      enable row level security;
+alter table public.lectures     enable row level security;
+alter table public.availability enable row level security;
+alter table public.sessions     enable row level security;
+alter table public.settings     enable row level security;
+
+notify pgrst, 'reload schema';
+
+-- ---------- verification ----------
+-- Expect exactly six rows. If you see fewer, the script did not finish.
+select table_name
+from information_schema.tables
+where table_schema = 'public'
+  and table_name in ('profiles','courses','lectures','availability','sessions','settings')
+order by table_name;
