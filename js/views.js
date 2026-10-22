@@ -452,10 +452,291 @@ var Views = (function () {
      Lecture timetable + availability
      ===================================================================== */
 
+  /* =====================================================================
+     Timetable image upload
+     ===================================================================== */
+
+  function timetableUpload(ctx, mount, refresh) {
+    var O = window.TimetableOCR;
+
+    if (!O) {
+      mount.innerHTML = '<div class="surface"><h2>Upload Your Timetable</h2>' +
+        UI.banner("err", "The timetable reader could not be loaded. Check your connection and reload the page.") + "</div>";
+      return;
+    }
+
+    var st = {
+      dataUrl: null, fileName: "", rows: [], warnings: [], error: null,
+      busy: false, progress: 0, label: "", notice: "", saved: 0
+    };
+
+    function shell() {
+      mount.innerHTML =
+        '<div class="surface">' +
+          "<h2>Upload Your Timetable</h2>" +
+          '<p class="sub">Upload a photo or screenshot of your timetable and we will read the course names, ' +
+            "days, times and rooms from it. You can correct anything before saving.</p>" +
+          '<div class="drop" id="drop">' +
+            '<input id="tt-file" type="file" accept="image/png,image/jpeg" hidden>' +
+            '<button class="btn" type="button" id="tt-pick">Upload Timetable Image</button>' +
+            '<p class="sub">PNG, JPG or JPEG \u00b7 up to 10 MB \u00b7 or drop the file here</p>' +
+          "</div>" +
+          '<div id="up-status"></div>' +
+          '<div id="up-preview"></div>' +
+          '<div id="up-rows"></div>' +
+          '<div id="up-actions"></div>' +
+        "</div>";
+
+      var input = mount.querySelector("#tt-file");
+      mount.querySelector("#tt-pick").addEventListener("click", function () { input.click(); });
+      input.addEventListener("change", function () { if (input.files && input.files[0]) handleFile(input.files[0]); });
+
+      var drop = mount.querySelector("#drop");
+      ["dragenter", "dragover"].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); });
+      });
+      ["dragleave", "drop"].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); });
+      });
+      drop.addEventListener("drop", function (e) {
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) handleFile(f);
+      });
+    }
+
+    function status() {
+      var host = mount.querySelector("#up-status");
+      if (!host) return;
+      if (st.busy) {
+        host.innerHTML = '<div class="up-progress">' +
+          '<div class="bar"><span style="width:' + Math.round(st.progress * 100) + '%"></span></div>' +
+          '<p class="sub">' + UI.esc(st.label) + "</p></div>";
+        return;
+      }
+      var html = "";
+      if (st.error) {
+        html += UI.banner("err", "<b>Could not read that timetable.</b> " + UI.esc(st.error) +
+          "<br>You can still add lectures one at a time using the form below.");
+      }
+      if (st.warnings && st.warnings.length) {
+        html += UI.banner("dev", "<b>Please check these before saving.</b><ul style=\"margin:8px 0 0 18px\">" +
+          st.warnings.map(function (w) { return "<li>" + UI.esc(w) + "</li>"; }).join("") + "</ul>");
+      }
+      if (st.notice) html += UI.banner("ok", st.notice);
+      host.innerHTML = html;
+    }
+
+    function preview() {
+      var host = mount.querySelector("#up-preview");
+      if (!host) return;
+      host.innerHTML = st.dataUrl
+        ? '<figure class="up-figure"><img src="' + st.dataUrl + '" alt="Uploaded timetable preview">' +
+          '<figcaption class="sub">' + UI.esc(st.fileName) + "</figcaption></figure>"
+        : "";
+    }
+
+    function rowsHtml(courses) {
+      if (!st.rows.length) return "";
+      var names = courses.map(function (c) { return c.name; });
+      return '<datalist id="up-courses">' + names.map(function (n) {
+        return '<option value="' + UI.esc(n) + '">';
+      }).join("") + "</datalist>" +
+      '<h3 class="up-h3">Check the ' + st.rows.length + " lecture" + (st.rows.length === 1 ? "" : "s") + " we found</h3>" +
+      '<div class="ocr-rows">' + st.rows.map(function (r, i) {
+        return '<div class="ocr-row" data-i="' + i + '">' +
+          '<div class="field"><label>Course</label>' +
+            '<input class="ocr-course" list="up-courses" value="' + UI.esc(r.course || "") + '" placeholder="Course name"></div>' +
+          '<div class="field"><label>Day</label><select class="ocr-day">' + dayOptions(r.day) + "</select></div>" +
+          '<div class="field"><label>Start</label><input class="ocr-start" type="time" value="' + UI.esc(r.start || "") + '"></div>' +
+          '<div class="field"><label>End</label><input class="ocr-end" type="time" value="' + UI.esc(r.end || "") + '"></div>' +
+          '<div class="field"><label>Location</label><input class="ocr-loc" value="' + UI.esc(r.location || "") + '" placeholder="Optional"></div>' +
+          '<button class="btn ghost small ocr-remove" type="button">Remove</button>' +
+        "</div>";
+      }).join("") + "</div>";
+    }
+
+    function renderRows(courses) {
+      var host = mount.querySelector("#up-rows");
+      if (!host) return;
+      host.innerHTML = rowsHtml(courses);
+      host.querySelectorAll(".ocr-remove").forEach(function (b) {
+        b.addEventListener("click", function () {
+          syncRows();
+          st.rows.splice(+b.closest(".ocr-row").getAttribute("data-i"), 1);
+          renderRows(courses);
+          actions(courses);
+        });
+      });
+    }
+
+    // Read back whatever the student typed, without re-rendering (which
+    // would steal focus mid-edit).
+    function syncRows() {
+      mount.querySelectorAll(".ocr-row").forEach(function (el, i) {
+        if (!st.rows[i]) return;
+        st.rows[i].course = el.querySelector(".ocr-course").value.trim();
+        st.rows[i].day = +el.querySelector(".ocr-day").value;
+        st.rows[i].start = el.querySelector(".ocr-start").value;
+        st.rows[i].end = el.querySelector(".ocr-end").value;
+        st.rows[i].location = el.querySelector(".ocr-loc").value.trim();
+      });
+    }
+
+    function actions(courses) {
+      var host = mount.querySelector("#up-actions");
+      if (!host) return;
+      if (!st.rows.length) { host.innerHTML = ""; return; }
+      host.innerHTML = '<div id="up-msg"></div>' +
+        '<div class="up-actions-row">' +
+          '<button class="btn coral" type="button" id="up-save">Confirm and Save Timetable</button>' +
+          '<button class="btn ghost" type="button" id="up-generate">Generate my study plan</button>' +
+        "</div>";
+      host.querySelector("#up-save").addEventListener("click", function () { save(courses); });
+      host.querySelector("#up-generate").addEventListener("click", function () { ctx.navigate("#/generate"); });
+    }
+
+    function save(courses) {
+      syncRows();
+      var msg = mount.querySelector("#up-msg");
+      var problems = [];
+      st.rows.forEach(function (r, i) {
+        var n = i + 1;
+        if (!r.course) problems.push("Row " + n + " has no course name.");
+        if (!r.start || !r.end) problems.push("Row " + n + " needs a start and end time.");
+        else if (r.start >= r.end) problems.push("Row " + n + ": the end time must be after the start time.");
+      });
+      if (!st.rows.length) problems.push("There is nothing to save.");
+      if (problems.length) {
+        msg.innerHTML = UI.banner("err", "<b>Fix these first.</b><ul style=\"margin:8px 0 0 18px\">" +
+          problems.map(function (p) { return "<li>" + UI.esc(p) + "</li>"; }).join("") + "</ul>");
+        return;
+      }
+
+      var btn = mount.querySelector("#up-save");
+      btn.disabled = true;
+      btn.textContent = "Saving\u2026";
+
+      var pool = courses.slice();
+      var created = 0;
+      var jobs = st.rows.map(function (r) {
+        return resolveCourse(pool, r).then(function (c) {
+          if (c.__created) created++;
+          return S.lectures.create({
+            courseId: c.id, day: r.day, start: r.start, end: r.end, location: r.location || ""
+          });
+        });
+      });
+
+      Promise.all(jobs).then(function () {
+        st.saved = st.rows.length;
+        st.rows = [];
+        st.dataUrl = null;
+        st.warnings = [];
+        st.notice = "<b>Saved." + "</b> " + st.saved + " lecture" + (st.saved === 1 ? "" : "s") +
+          " added to your timetable" + (created ? " and " + created + " new course" + (created === 1 ? "" : "s") +
+          " created with a default 2-hour reading estimate (adjust on My Courses)" : "") +
+          ". Reading sessions will now avoid these lecture times.";
+        UI.toast("Timetable saved");
+        shell();
+        status();
+        refresh();
+      }).catch(function (err) {
+        msg.innerHTML = UI.banner("err", UI.esc(err.message));
+        btn.disabled = false;
+        btn.textContent = "Confirm and Save Timetable";
+      });
+    }
+
+    // Match an extracted name to an existing course, or create one.
+    function resolveCourse(pool, r) {
+      var want = String(r.course || "").trim().toLowerCase();
+      var match = pool.filter(function (c) {
+        var name = String(c.name || "").trim().toLowerCase();
+        var code = String(c.code || "").trim().toLowerCase().replace(/\s+/g, "");
+        return name === want || (code && (code === want || code === want.replace(/\s+/g, "")));
+      })[0];
+      if (match) return Promise.resolve(match);
+
+      return S.courses.create({
+        name: r.course, code: r.code || "", units: null,
+        priority: "medium", difficulty: 3, examDate: null,
+        // A course with no topics and no estimate cannot be scheduled, so
+        // imported courses get a modest default the student can edit.
+        estimatedMinutes: 120, topics: [], deadlines: []
+      }).then(function (c) { c.__created = true; pool.push(c); return c; });
+    }
+
+    function handleFile(file) {
+      var bad = O.validateFile(file);
+      st.error = bad;
+      st.rows = [];
+      st.warnings = [];
+      st.notice = "";
+      if (bad) {
+        st.dataUrl = null;
+        shell(); status(); return;
+      }
+
+      var reader = new FileReader();
+      reader.onload = function () {
+        st.dataUrl = reader.result;
+        st.fileName = file.name || "timetable";
+        preview();
+        runOcr(file);
+      };
+      reader.onerror = function () {
+        st.error = "That image could not be read from your device.";
+        shell(); status();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function runOcr(file) {
+      st.busy = true; st.progress = 0; st.label = "Starting\u2026"; st.error = null;
+      shell(); preview(); status();
+      O.extractFromImage(file, function (p, label) {
+        st.progress = p; st.label = label;
+        var el = mount.querySelector("#up-status .bar span");
+        var lab = mount.querySelector("#up-status .sub");
+        if (el) el.style.width = Math.round(p * 100) + "%";
+        if (lab && label) lab.textContent = label;
+      }).then(function (res) {
+        st.busy = false;
+        if (!res.ok || !res.rows.length) {
+          st.error = (res.warnings && res.warnings.length)
+            ? res.warnings.join(" ")
+            : "No lectures could be recognised in that image. Try a sharper photo, or enter lectures manually below.";
+          st.rows = [];
+          status();
+          return;
+        }
+        st.rows = res.rows.map(function (r) {
+          return {
+            course: r.course || "", code: r.code || "",
+            day: (r.day === null || r.day === undefined) ? 1 : r.day,
+            start: r.start, end: r.end, location: r.location || ""
+          };
+        });
+        st.warnings = res.warnings || [];
+        S.courses.list().then(function (courses) {
+          status(); renderRows(courses); actions(courses);
+        });
+      }).catch(function (err) {
+        st.busy = false;
+        st.error = err && err.message ? err.message : String(err);
+        status();
+      });
+    }
+
+    shell();
+    status();
+  }
+
   function timetable(ctx) {
     ctx.root.innerHTML = '<div class="page-head"><h1>My Lecture Timetable</h1>' +
       "<p>Enter your weekly lectures, then mark the periods you can study and the ones you cannot. " +
       "Reading sessions are only ever placed inside your study periods.</p></div>" +
+      '<div id="tt-upload"></div>' +
       '<div id="tt-host"><p class="empty">Loading\u2026</p></div>';
 
     function render() {
@@ -587,12 +868,9 @@ var Views = (function () {
         });
       }).catch(showError(ctx));
     }
+    timetableUpload(ctx, ctx.root.querySelector("#tt-upload"), render);
     render();
   }
-
-  /* =====================================================================
-     Generate study plan
-     ===================================================================== */
 
   function generate(ctx) {
     ctx.root.innerHTML = '<div class="page-head"><h1>Generate Study Plan</h1>' +
