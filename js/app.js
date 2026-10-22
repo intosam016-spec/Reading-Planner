@@ -4,13 +4,16 @@
 (function () {
   "use strict";
 
+  // `label` is shown on wide screens, `short` on narrow ones where the
+  // full text would overflow. Both are real elements, so whichever is
+  // visible is what assistive tech announces.
   var NAV = [
-    { hash: "#/dashboard", label: "Dashboard" },
-    { hash: "#/courses",   label: "My Courses" },
-    { hash: "#/timetable", label: "My Lecture Timetable" },
-    { hash: "#/generate",  label: "Generate Study Plan" },
-    { hash: "#/tasks",     label: "My Reading Tasks" },
-    { hash: "#/progress",  label: "Progress" }
+    { hash: "#/dashboard", label: "Dashboard",            short: "Home" },
+    { hash: "#/courses",   label: "My Courses",           short: "Courses" },
+    { hash: "#/timetable", label: "My Lecture Timetable", short: "Timetable" },
+    { hash: "#/generate",  label: "Generate Study Plan",  short: "Generate" },
+    { hash: "#/tasks",     label: "My Reading Tasks",     short: "Tasks" },
+    { hash: "#/progress",  label: "Progress",             short: "Progress" }
   ];
 
   var PUBLIC_ROUTES = { "#/login": "login", "#/register": "register" };
@@ -33,12 +36,20 @@
     var setup = Promise.resolve(null);
     if (hasSupabase && window.supabase) {
       var client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
-      setup = StudyAuth.configure(StudyAuth.supabaseAuthDriver(client, location.origin))
-        .then(function (user) {
-          StudyStore.configure(StudyStore.supabaseDriver(client), user ? user.id : null);
-          return client;
-        });
+      var driver = StudyStore.supabaseDriver(client);
+      // Verify the backend is actually usable before trusting it. A project
+      // whose schema was never applied would otherwise swallow every write
+      // and look like it worked.
+      setup = driver.probe().then(function (h) {
+        StudyStore.setBackendStatus("supabase", h.ok, h.reason);
+        if (!h.ok) console.error("Study Planner: Supabase backend is not usable — " + h.reason);
+        return StudyAuth.configure(StudyAuth.supabaseAuthDriver(client, location.origin));
+      }).then(function (user) {
+        StudyStore.configure(driver, user ? user.id : null);
+        return client;
+      });
     } else {
+      StudyStore.setBackendStatus("local", true, "");
       setup = StudyAuth.configure(StudyAuth.localAuthDriver())
         .then(function (user) {
           StudyStore.configure(StudyStore.localDriver(), user ? user.id : null);
@@ -80,7 +91,10 @@
 
     var current = location.hash || "#/dashboard";
     navEl.innerHTML = '<div class="nav-in">' + NAV.map(function (n) {
-      return '<a href="' + n.hash + '"' + (n.hash === current ? ' aria-current="page"' : "") + ">" + UI.esc(n.label) + "</a>";
+      return '<a href="' + n.hash + '"' + (n.hash === current ? ' aria-current="page"' : "") + ">" +
+        '<span class="nav-full">' + UI.esc(n.label) + "</span>" +
+        '<span class="nav-short">' + UI.esc(n.short) + "</span>" +
+        "</a>";
     }).join("") + "</div>";
   }
 
