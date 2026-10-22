@@ -265,6 +265,51 @@ console.log("\n[T13] Progress maths");
   ok("all-done day is 100%", E.summarise([{ status: "done", minutes: 10 }]).percent === 100);
 }
 
+console.log("\n[deriveStudyWindows] automatic study periods");
+{
+  const { deriveStudyWindows } = E;
+  const T = require("../js/engine.js");
+
+  // no lectures: the full default day is free
+  let w = T.deriveStudyWindows([]);
+  ok(w.length === 7, "one window per day when there are no lectures (got " + w.length + ")");
+  ok(w.every(x => x.kind === "study"), "all derived rows are study periods");
+  ok(w.some(x => x.day === 1 && x.start === "08:00" && x.end === "21:00"), "Monday covers the default day");
+
+  // a lecture carves Monday
+  w = T.deriveStudyWindows([{ day: 1, start: "08:00", end: "11:00" }]);
+  const mon = w.filter(x => x.day === 1).sort((a, b) => a.start < b.start ? -1 : 1);
+  ok(mon.length === 1 && mon[0].start === "11:00" && mon[0].end === "21:00",
+     "Monday free time starts after the lecture (" + JSON.stringify(mon) + ")");
+
+  // a mid-day lecture splits the day
+  w = T.deriveStudyWindows([{ day: 2, start: "10:00", end: "12:00" }]);
+  const tue = w.filter(x => x.day === 2).sort((a, b) => a.start < b.start ? -1 : 1);
+  ok(tue.length === 2, "Tuesday split into two windows (got " + tue.length + ")");
+  ok(tue[0].start === "08:00" && tue[0].end === "10:00", "morning window before the lecture");
+  ok(tue[1].start === "12:00" && tue[1].end === "21:00", "afternoon window after the lecture");
+
+  // buffer widens the cut
+  w = T.deriveStudyWindows([{ day: 2, start: "10:00", end: "12:00" }], { buffer: 15 });
+  const tue2 = w.filter(x => x.day === 2).sort((a, b) => a.start < b.start ? -1 : 1);
+  ok(tue2[0].end === "09:45", "buffer trims before the lecture (got " + tue2[0].end + ")");
+  ok(tue2[1].start === "12:15", "buffer trims after the lecture (got " + tue2[1].start + ")");
+
+  // never overlaps a lecture
+  const lecs = [
+    { day: 1, start: "08:00", end: "11:00" }, { day: 1, start: "14:00", end: "17:00" },
+    { day: 3, start: "09:00", end: "12:00" },
+  ];
+  const mine = T.deriveStudyWindows(lecs);
+  const overlaps = mine.filter(x => lecs.some(l => {
+    if (l.day !== x.day) return false;
+    const xs = T.toMin(x.start), xe = T.toMin(x.end);
+    const ls = T.toMin(l.start), le = T.toMin(l.end);
+    return xs < le && xe > ls;
+  }));
+  ok(overlaps.length === 0, "no derived window overlaps a lecture (" + overlaps.length + ")");
+}
+
 console.log("\n" + "=".repeat(46));
 console.log("  " + pass + " passed, " + fail + " failed");
 console.log("=".repeat(46));
