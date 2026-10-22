@@ -1,6 +1,6 @@
-# University Study Planner
+# Study Planner
 
-Plan university reading around your lectures. Courses, a weekly lecture timetable,
+Plan your reading around your lectures. Courses, a weekly lecture timetable,
 automatic reading-session generation, progress tracking — per student account.
 
 **Live:** https://planner-tau-rust.vercel.app/
@@ -14,10 +14,39 @@ automatic reading-session generation, progress tracking — per student account.
 | **Accounts** | Register / sign in / sign out. Email + password, and Google. Each student sees only their own data. |
 | **Dashboard** | Courses, today's sessions, upcoming exams and deadlines, daily and weekly progress, and a button straight to plan generation. |
 | **My Courses** | Add, edit and delete courses with name, code, credit units, priority, difficulty, exam date, assignment deadlines, and topics/chapters. |
-| **My Lecture Timetable** | Weekly lectures plus the study periods you *can* use and the ones you *cannot*. Shown as a weekly grid. |
+| **My Lecture Timetable** | Upload a photo of your timetable and have it read automatically, or add lectures by hand. Plus the study periods you *can* use and the ones you *cannot*. Shown as a weekly grid. |
 | **Generate Study Plan** | Builds reading sessions from your courses, lectures, availability, priorities and deadlines. Weekly calendar + daily agenda. |
 | **My Reading Tasks** | Mark each session done / pending / missed, move it to another date, or delete it. |
 | **Progress** | Daily, weekly and all-time completion, plus everything still outstanding. |
+
+### Uploading a timetable image
+
+The timetable page accepts a PNG or JPG of your timetable and fills in the
+lectures for you. Everything it reads is shown in an editable table, so a
+misread course name or time can be corrected before anything is saved.
+
+Recognition runs **entirely in the browser** using [Tesseract.js](https://tesseract.projectnaptha.com/)
+(WASM). There is no API key, no server, and **your timetable image is never
+uploaded anywhere** — it is read locally and discarded. Tesseract is fetched
+from a CDN the first time you use the feature, so the first run needs a
+connection.
+
+The parser handles the three layouts real timetables normally use: a day and a
+time on the same line, days as column headers above time rows, and days as row
+labels. It reads course names, days, start and end times, and room names.
+
+It is deliberately conservative. When it cannot work something out it says so
+and asks rather than guessing:
+
+- no times recognised → "No lecture times could be read from this image"
+- times but no days → "Times were found but no day could be matched"
+- a row with no course name → that row is flagged for you to fill in
+
+A row is never saved unless its course, start and end time are valid. Lectures
+that belong to a course you already have are attached to it; genuinely new
+course names create a course with a default 2-hour reading estimate, which you
+can change on **My Courses**. Once saved, the generator avoids those lecture
+times automatically.
 
 ### The generator never invents a timetable
 
@@ -113,14 +142,20 @@ and the yellow "Development mode" banner disappears.
 ## Running the tests
 
 ```bash
-node tests/engine.tests.cjs      # 70 passed — generator logic
-node test-study-app.cjs          # 61 passed — full app in Chromium
+node tests/engine.tests.cjs         # 70 passed — generator logic
+node tests/timetable-ocr.tests.cjs  # 58 passed — timetable image parser
+node test-study-app.cjs             # 61 passed — full app in Chromium
 ```
 
 The generator suite covers interval maths, refusal-on-missing-input, free-time
 calculation around lectures and blocked periods, no-overlap guarantees, break
 enforcement, priority and deadline weighting, multi-week distribution, determinism,
 regeneration-preserves-completed, and the progress maths.
+
+The timetable parser suite covers time-range formats (24h, am/pm, dotted,
+military, noon-crossing), day-name variants, course-versus-room splitting, the
+three timetable layouts, and the two things that matter most: it never invents a
+row it could not read, and it reports exactly what it could not work out.
 
 The browser suite drives registration, validation, course CRUD, editing, lectures,
 availability, generation, constraint checking on the *rendered* plan, saving,
