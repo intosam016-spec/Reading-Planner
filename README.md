@@ -35,6 +35,20 @@ The parser handles the three layouts real timetables normally use: a day and a
 time on the same line, days as column headers above time rows, and days as row
 labels. It reads course names, days, start and end times, and room names.
 
+Grid timetables that put the clock in a left-hand column (rather than writing
+`09:00 - 10:30`) are handled too: each time opens a band that runs until the next
+time, and each line is filed under the day column it sits in.
+
+Before OCR the image is redrawn on a canvas. That is not cosmetic — it fixes
+three things that otherwise break recognition:
+
+- **large phone photos** are downscaled (a 12-megapixel shot exhausts the OCR
+  worker and surfaces as *"File could not be read! Code=0"*)
+- **dark-background screenshots** are inverted, because OCR expects dark text on
+  light paper — this is the difference between reading nothing and reading
+  everything on a dark timetable app
+- **EXIF rotation** is applied, so a portrait photo is not read sideways
+
 It is deliberately conservative. When it cannot work something out it says so
 and asks rather than guessing:
 
