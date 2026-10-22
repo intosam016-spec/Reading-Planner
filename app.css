@@ -326,6 +326,69 @@ input,select,textarea{font:inherit;color:inherit;}
   .nav a{min-height:48px;}
 }
 
+/* ---------- timetable image upload ---------- */
+.drop{
+  border:2px dashed var(--field-border);
+  border-radius:14px;
+  padding:var(--sp-5) var(--sp-4);
+  text-align:center;
+  background:var(--field-bg);
+  transition:border-color .15s ease, background .15s ease;
+}
+.drop.over{border-color:var(--coral-deep);background:var(--surface);}
+.drop .btn{margin-bottom:var(--sp-2);}
+.drop .sub{margin:0;}
+
+.up-progress{margin-top:var(--sp-4);}
+.up-progress .bar{
+  height:8px;border-radius:99px;background:rgba(31,58,95,.12);overflow:hidden;
+}
+.up-progress .bar span{
+  display:block;height:100%;width:0;background:var(--navy);border-radius:99px;
+  transition:width .2s ease;
+}
+.up-progress .sub{margin:var(--sp-2) 0 0;}
+
+.up-figure{
+  margin:var(--sp-4) 0 0;padding:0;
+  border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);
+}
+.up-figure img{
+  display:block;margin:0 auto;
+  max-width:100%;max-height:360px;width:auto;height:auto;
+  background:var(--surface);
+}
+.up-figure figcaption{padding:var(--sp-2) var(--sp-3);border-top:1px solid var(--line);}
+
+.up-h3{margin:var(--sp-5) 0 var(--sp-3);font-size:1rem;}
+
+.ocr-rows{display:grid;gap:var(--sp-3);}
+.ocr-row{
+  display:grid;
+  grid-template-columns:1.6fr .9fr .8fr .8fr 1.2fr auto;
+  gap:var(--sp-3);
+  align-items:end;
+  padding:var(--sp-3);
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--field-bg);
+}
+.ocr-row .field{margin:0;}
+.ocr-row .field label{font-size:.75rem;}
+
+.up-actions-row{
+  display:flex;gap:var(--sp-3);flex-wrap:wrap;margin-top:var(--sp-3);
+}
+
+@media (max-width:860px){
+  /* stack the editable rows so each field stays full width and tappable */
+  .ocr-row{grid-template-columns:1fr 1fr;}
+  .ocr-row .ocr-remove{grid-column:1 / -1;justify-self:start;}
+  .ocr-row .field input,
+  .ocr-row .field select{width:100%;}
+  .up-actions-row .btn{width:100%;}
+}
+
 @media (prefers-reduced-motion:reduce){
   *{transition:none !important;animation:none !important;}
 }
