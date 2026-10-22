@@ -588,14 +588,32 @@ var Views = (function () {
     function actions(courses) {
       var host = mount.querySelector("#up-actions");
       if (!host) return;
-      if (!st.rows.length) { host.innerHTML = ""; return; }
+
+      // After a successful save the review rows are gone, but the next step
+      // should be right here rather than on another page.
+      if (!st.rows.length) {
+        if (st.saved > 0) {
+          host.innerHTML = '<div class="up-actions-row">' +
+            '<button class="btn coral" type="button" id="up-generate">Generate my timetable</button>' +
+            '<button class="btn ghost" type="button" id="up-again">Upload another image</button>' +
+          "</div>";
+          host.querySelector("#up-generate").addEventListener("click", function () { ctx.navigate("#/generate"); });
+          host.querySelector("#up-again").addEventListener("click", function () {
+            st.saved = 0; st.notice = ""; st.error = null; st.warnings = [];
+            st.dataUrl = null; st.rows = [];
+            shell(); status(); actions([]);
+          });
+        } else {
+          host.innerHTML = "";
+        }
+        return;
+      }
+
       host.innerHTML = '<div id="up-msg"></div>' +
         '<div class="up-actions-row">' +
           '<button class="btn coral" type="button" id="up-save">Confirm and Save Timetable</button>' +
-          '<button class="btn ghost" type="button" id="up-generate">Generate my study plan</button>' +
         "</div>";
       host.querySelector("#up-save").addEventListener("click", function () { save(courses); });
-      host.querySelector("#up-generate").addEventListener("click", function () { ctx.navigate("#/generate"); });
     }
 
     function save(courses) {
@@ -642,6 +660,7 @@ var Views = (function () {
         UI.toast("Timetable saved");
         shell();
         status();
+        actions([]);
         refresh();
       }).catch(function (err) {
         msg.innerHTML = UI.banner("err", UI.esc(err.message));
@@ -877,14 +896,33 @@ var Views = (function () {
 
   function generate(ctx) {
     ctx.root.innerHTML = '<div class="page-head"><h1>Generate Study Plan</h1>' +
-      "<p>Reading sessions are fitted around your lectures and only inside the study periods you set. " +
+      "<p>Reading sessions are fitted around your lectures and only inside your free time. " +
       "If something essential is missing, you will be asked for it rather than given a made-up timetable.</p></div>" +
       '<div id="gen-host"><p class="empty">Loading\u2026</p></div>';
+
+    // Study periods are derived once per visit when the student has none, so
+    // generating is a single click rather than a form to fill in.
+    var autoTried = false;
+    var autoRunPending = false;
 
     function render() {
       Promise.all([S.courses.list(), S.lectures.list(), S.availability.list(), S.settings.get(), S.sessions.list()])
         .then(function (r) {
           var courses = r[0], lectures = r[1], availability = r[2], prefs = r[3], existing = r[4];
+          var studyCount = availability.filter(function (a) { return a.kind === "study"; }).length;
+
+          // First visit with no study periods: derive them from the lecture
+          // timetable so generating is one click, not a form to fill in.
+          if (!studyCount && !autoTried) {
+            autoTried = true;
+            var derived = E.deriveStudyWindows(lectures, { buffer: +prefs.lectureBufferMinutes || 0 });
+            if (derived.length) {
+              return Promise.all(derived.map(function (w) { return S.availability.create(w); }))
+                .then(function () { autoRunPending = true; render(); });
+            }
+          }
+
+          var justDerived = autoRunPending && studyCount > 0;
           var profile = { courses: courses, lectures: lectures, availability: availability, preferences: prefs };
           var check = E.validatePlanInput(profile);
 
@@ -903,8 +941,15 @@ var Views = (function () {
             (check.ok ? "" : U.banner("err", "<b>Before a timetable can be generated:</b><ul style=\"margin:8px 0 0 18px\">" +
               check.missing.map(function (m) { return "<li>" + U.esc(m.message) + "</li>"; }).join("") + "</ul>")) +
 
-            '<div class="surface"><h2>Preferences</h2>' +
+            (justDerived ? U.banner("ok", "<b>We set up your study times.</b> They fit around your lectures, so you can generate straight away. Change them any time on My Lecture Timetable.") : "") +
+
+            '<div class="surface"><h2>Generate your plan</h2>' +
+              '<p class="sub">' + U.esc(prefs.sessionMinutes) + "-minute sessions, " +
+                U.esc(prefs.breakMinutes) + "-minute breaks, up to " + U.esc(prefs.maxSessionsPerDay) +
+                " a day, " + U.esc(prefs.weeks || 1) + ((+prefs.weeks || 1) === 1 ? " week" : " weeks") +
+                ", starting " + U.fmtDate(prefs.startDate || U.todayISO()) + "</p>" +
               '<form id="pref-form" novalidate>' +
+                '<details class="adv"><summary>Change these settings</summary><div class="adv-body">' +
                 '<div class="row">' +
                   '<div class="field" data-field="sessionMinutes"><label for="p-session">Session length (minutes)</label>' +
                     '<input id="p-session" name="sessionMinutes" type="number" min="30" step="15" value="' + U.esc(prefs.sessionMinutes) + '"><div class="err"></div></div>' +
@@ -921,8 +966,9 @@ var Views = (function () {
                   '<div class="field" data-field="lectureBufferMinutes"><label for="p-buffer">Travel buffer after lectures</label>' +
                     '<input id="p-buffer" name="lectureBufferMinutes" type="number" min="0" step="5" value="' + U.esc(prefs.lectureBufferMinutes || 0) + '"><div class="err"></div></div>' +
                 "</div>" +
+                '</div></details>' +
                 '<div id="pref-msg"></div>' +
-                '<button class="btn coral" type="submit"' + (check.ok ? "" : " disabled") + ">Generate timetable</button>" +
+                '<button class="btn coral" type="submit"' + (check.ok ? "" : " disabled") + ">Generate my timetable</button>" +
               "</form>" +
             "</div>" +
 
@@ -948,9 +994,18 @@ var Views = (function () {
             S.settings.set(next).then(function (saved) {
               var p = { courses: courses, lectures: lectures, availability: availability, preferences: saved };
               var result = E.generatePlan(p, { weeks: saved.weeks, today: saved.startDate });
-              showPlan(ctx, result, p, courses, host.querySelector("#plan-host"));
+              showPlan(ctx, result, p, courses, host.querySelector("#plan-host"), 0, true);
             }).catch(showError(ctx));
           });
+
+          // Arriving straight from an upload: build the plan without making
+          // the student press anything.
+          if (autoRunPending && !existing.length && check.ok) {
+            autoRunPending = false;
+            setTimeout(function () {
+              if (pf.isConnected) pf.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+            }, 0);
+          }
 
           var regen = host.querySelector('[data-act="regen"]');
           if (regen) regen.addEventListener("click", function () {
@@ -967,7 +1022,7 @@ var Views = (function () {
         }).catch(showError(ctx));
     }
 
-    function showPlan(ctx, result, profile, courses, host, keptCount) {
+    function showPlan(ctx, result, profile, courses, host, keptCount, autoSave) {
       if (!result.ok) {
         host.innerHTML = '<div class="surface">' + U.banner("err",
           "<b>Cannot generate a timetable yet:</b><ul style=\"margin:8px 0 0 18px\">" +
@@ -1017,20 +1072,45 @@ var Views = (function () {
           '<button class="btn coral" id="save-plan" type="button">Save this timetable</button>' +
         "</div>";
 
-      host.querySelector("#save-plan").addEventListener("click", function () {
-        var btn = this;
-        btn.disabled = true;
-        var rows = result.sessions.map(function (s) {
+      function persist() {
+        return S.sessions.replaceAll(result.sessions.map(function (s) {
           return {
             id: s.id, courseId: s.courseId, topicId: s.topicId, day: s.day, date: s.date,
             week: s.week, start: s.start, end: s.end, startMin: s.startMin, endMin: s.endMin,
             minutes: s.minutes, status: s.status || "pending", locked: !!s.locked
           };
+        }));
+      }
+
+      var saveBtn = host.querySelector("#save-plan");
+
+      // Generating already means "make me a timetable", so save it straight
+      // away rather than asking for a second confirmation click.
+      if (autoSave) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving\u2026";
+        persist().then(function () {
+          saveBtn.textContent = "Saved \u2713";
+          U.toast("Timetable saved \u2014 see My Reading Tasks");
+        }).catch(function (err) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Retry saving";
+          showError(ctx)(err);
         });
-        S.sessions.replaceAll(rows).then(function () {
+        return;
+      }
+
+      saveBtn.addEventListener("click", function () {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving\u2026";
+        persist().then(function () {
           U.toast("Timetable saved");
           render();
-        }).catch(function (err) { btn.disabled = false; showError(ctx)(err); });
+        }).catch(function (err) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save this timetable";
+          showError(ctx)(err);
+        });
       });
     }
     render();
