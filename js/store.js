@@ -17,6 +17,16 @@ var StudyStore = (function () {
   var current = null;          // active driver
   var currentUserId = null;
 
+  // Whether the backend is not just *configured* but actually answering.
+  // The UI keys its warning banner off this, so a Supabase project whose
+  // tables are missing keeps warning the user instead of silently failing.
+  var backend = { mode: "local", healthy: true, reason: "" };
+
+  function setBackendStatus(mode, healthy, reason) {
+    backend = { mode: mode, healthy: !!healthy, reason: reason || "" };
+  }
+  function backendStatus() { return backend; }
+
   function configure(driver, userId) {
     current = driver;
     currentUserId = userId || null;
@@ -254,6 +264,20 @@ var StudyStore = (function () {
     }
     return {
       name: "supabase",
+      // Cheap round-trip proving the tables exist AND the API can see
+      // them. A table that was never created, or that the API roles have
+      // no privilege on, comes back as PGRST205.
+      probe: function () {
+        return table("courses").select("id").limit(1).then(function (res) {
+          if (res.error) {
+            var code = res.error.code ? res.error.code + ": " : "";
+            return { ok: false, reason: code + (res.error.message || "unknown error") };
+          }
+          return { ok: true };
+        }).catch(function (e) {
+          return { ok: false, reason: e && e.message ? e.message : String(e) };
+        });
+      },
       list: function (userId, collection, filter) {
         var q = table(collection).select("*").eq("user_id", userId);
         if (filter) Object.keys(filter).forEach(function (k) { q = q.eq(k, filter[k]); });
@@ -318,9 +342,57 @@ var StudyStore = (function () {
     return out;
   }
 
+  /* ---------- one-time import of data left in this browser ---------- */
+
+  // Reads back whatever a legacy local account left in localStorage,
+  // matched by email, so it can be offered for import once the real
+  // backend is live. Returns null when there is nothing to move.
+  function localSnapshot(email, namespace) {
+    if (!email || typeof localStorage === "undefined") return null;
+    var ns = namespace || "study-planner-dev";
+    function readJson(k) {
+      try { return JSON.parse(localStorage.getItem(k) || "[]"); }
+      catch (e) { return []; }
+    }
+    var match = readJson(ns + ":users").filter(function (u) {
+      return String(u.email || "").toLowerCase() === String(email).toLowerCase();
+    })[0];
+    if (!match) return null;
+
+    var out = {}, total = 0;
+    COLLECTIONS.forEach(function (c) {
+      var rows = readJson(ns + ":" + c).filter(function (r) { return r.userId === match.id; });
+      out[c] = rows;
+      total += c === "settings" ? (rows.length ? 1 : 0) : rows.length;
+    });
+    return total ? { localUserId: match.id, email: match.email, data: out, count: total } : null;
+  }
+
+  // Copies a snapshot into the active (Supabase) driver. Only ever called
+  // on an empty account, so it cannot overwrite real data.
+  function importLocalSnapshot(userId, snap) {
+    requireReady();
+    var jobs = [];
+    ["courses", "lectures", "availability", "sessions"].forEach(function (c) {
+      var rows = (snap.data[c] || []).map(function (r) {
+        var copy = Object.assign({}, r);
+        delete copy.userId;
+        return copy;
+      });
+      if (rows.length) jobs.push(current.replaceAll(userId, c, rows));
+    });
+    var st = (snap.data.settings || [])[0];
+    if (st && st.value) jobs.push(current.saveSettings(userId, st.value));
+    return Promise.all(jobs).then(function () { return snap.count; });
+  }
+
   api.localDriver = localDriver;
   api.supabaseDriver = supabaseDriver;
   api.defaultPreferences = defaultPreferences;
+  api.setBackendStatus = setBackendStatus;
+  api.backendStatus = backendStatus;
+  api.localSnapshot = localSnapshot;
+  api.importLocalSnapshot = importLocalSnapshot;
   api.toRow = toRow;
   api.fromRow = fromRow;
 
